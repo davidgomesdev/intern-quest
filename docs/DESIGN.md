@@ -1,6 +1,6 @@
 # Intern Quest: DESIGN (visual + technical)
 
-Status: APPROVED (D1-D5 accepted as recommended). SPEC.md is authoritative; where this doc and the spec disagree, the spec wins and the gap is listed in §9.
+Status: APPROVED (D1-D5 accepted as recommended). Visual design is superseded by `docs/mockup/` (see `DESIGN-VISUAL.md`); page size is 50 and only Estado, Nº, Nome, Cidade, Distrito and Áreas are sortable (SPEC §6.1, §6.4). SPEC.md is authoritative; where this doc and the spec disagree, the spec wins and the gap is listed in §9.
 Principle: the laziest thing that works. Python stdlib for scripts, plain DOM APIs in the browser, no dependencies, no build.
 
 ## 1. File layout
@@ -105,7 +105,7 @@ State `S` and its hash keys (short Portuguese words, shareable):
 | `estado` | `todos` / `ok` / `todo` | `todos` |
 | `rem` | `1` = show rows removed from OPP | off |
 | `ord`, `dir` | sort column key, `asc`/`desc` | `n`, `asc` |
-| `p` | page (100 rows) | `1` |
+| `p` | page (50 rows) | `1` |
 
 Events: one `input` listener on `#filters` (delegation) resets `S.p = 1` and calls `update()`. Each update takes about 5 ms for 6,345 rows, so there is no debounce. Each header `<button>` toggles the sort. "Limpar" clears `S` and the hash. Filtering runs on every keystroke and needs no index.
 

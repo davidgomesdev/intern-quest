@@ -196,3 +196,6 @@ footer { padding: var(--s4) 0 var(--s6); font-size: 13px; color: var(--muted); }
   #painel, .barra, .pager-fim, thead { display: none; }
   tbody tr { break-inside: avoid; }
 }
+
+/* columns that are not sortable: kept for screen readers, hidden from the sort bar */
+th.nosort{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}

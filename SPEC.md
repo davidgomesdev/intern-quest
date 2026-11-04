@@ -12,13 +12,13 @@ Help a psychology graduate find an internship (Ano Profissional Júnior) **in or
 - **6,345 entities** (not 7,498: 7,498 is the highest protocol number; gaps are protocols not currently listed).
 - 6,345 unique protocol numbers, 6,342 unique names (3 repeated names). The protocol number is the primary key, never the name.
 - The OPP list is informational only and does not mean an open vacancy. The site must say so (see 6.5).
-- The initial table is generated from the source page by `scripts/sync` run on an empty `index.html` (no separate seed script).
+- The initial table is generated from the source page by `scripts/sync.py` run on an empty `index.html` (no separate seed script).
 
 ## 3. Deliverable
 
 A single static page `index.html`, hosted on GitHub Pages, containing every entity. No backend, no framework, no build step at view time. Vanilla JS and CSS, inline or in two sibling files.
 
-Repo contents (small on purpose): `index.html`, its CSS and JS files, `README.md`, `SPEC.md`, the subagent skill, `scripts/sync` (also seeds an empty table), `scripts/check` (PR validation), `scripts/test`, and the CI workflow under `.github/workflows/`. Exact layout is set in the design doc.
+Repo contents (small on purpose): `index.html`, its CSS and JS files, `README.md`, `SPEC.md`, the subagent skill, `scripts/sync.py` (also seeds an empty table), `scripts/check.py` (PR validation), `scripts/test.py`, and the CI workflow under `.github/workflows/`. Exact layout is set in the design doc.
 
 ## 4. Data model (one entity)
 
@@ -144,7 +144,7 @@ A small script that fails the PR if:
 
 ### 7.5 Syncing new entities from OPP **[CALL]**
 
-Command: `scripts/sync` (Python stdlib, no deps). The orchestrator runs it, then opens **one sync PR**. This is the only PR allowed to change more than one entity line, and it may only add or flag lines, never fill them.
+Command: `scripts/sync.py` (Python stdlib, no deps). The orchestrator runs it, then opens **one sync PR**. This is the only PR allowed to change more than one entity line, and it may only add or flag lines, never fill them.
 
 - Last known id: `grep -o '<tr id="e[0-9]*"' index.html | tail -1`. Printed as information.
 - Real comparison is by **set of ids**, not only the max id. OPP ids have gaps and a new entity could in principle appear below the current max.
@@ -159,7 +159,7 @@ Command: `scripts/sync` (Python stdlib, no deps). The orchestrator runs it, then
 
 ## 8. Quality
 
-- `scripts/sync` is deterministic: running it twice yields byte-identical output.
+- `scripts/sync.py` is deterministic: running it twice yields byte-identical output.
 - Seed check: 6,345 rows, ids unique, all start `⬜`.
 - Sync check: against a fixture, one new id is inserted in sorted position, one removed id is flagged not deleted, a second run is a no-op.
 - Page check: opens with no console errors; sorting and filtering produce the expected counts on a small fixture.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate index.html rows. Usage: scripts/check FILE"""
+"""Validate index.html rows. Usage: scripts/check.py FILE"""
 import re
 import subprocess
 import sys
@@ -186,7 +186,7 @@ def main_diff(argv):
         branch = a[i + 1] if i + 1 < len(a) else None
         del a[i:i + 2]
     if len(a) != 1 or branch is None and '--branch' in argv:
-        print('usage: scripts/check --diff BASE_REF [--branch NAME]', file=sys.stderr)
+        print('usage: scripts/check.py --diff BASE_REF [--branch NAME]', file=sys.stderr)
         return 2
     rng = a[0] + '...HEAD'
     text = _git('diff', '--unified=0', rng, '--', 'index.html')
@@ -201,7 +201,7 @@ def main(argv):
     if len(argv) >= 3 and argv[1] == '--diff':
         return main_diff(argv)
     if len(argv) != 2:
-        print('usage: scripts/check FILE', file=sys.stderr)
+        print('usage: scripts/check.py FILE', file=sys.stderr)
         return 2
     errs = check_file(argv[1])
     text = open(argv[1], encoding='utf-8').read()

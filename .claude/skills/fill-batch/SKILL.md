@@ -1,6 +1,6 @@
 ---
 name: fill-batch
-description: Use when given a list of OPP protocol numbers (or a count N) to fill in index.html, one subagent per entity.
+description: Use when given a list of OPP protocol numbers (a count N, or nothing for 5 random ones) to fill in index.html, one subagent per entity.
 ---
 
 # Fill a batch of entities
@@ -14,6 +14,12 @@ Given a count N instead: take the first N unfilled rows.
 
 ```bash
 grep -o '^<tr id="e[0-9]*"><td>⬜' index.html | head -N | grep -o '[0-9]\{4,\}'
+```
+
+Given nothing: take 5 random unfilled rows.
+
+```bash
+grep -o '^<tr id="e[0-9]*"><td>⬜' index.html | sort -R | head -5 | grep -o '[0-9]\{4,\}'
 ```
 
 ## 2. Keep only dispatchable ids

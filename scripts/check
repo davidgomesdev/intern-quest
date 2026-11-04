@@ -3,6 +3,7 @@
 import re
 import subprocess
 import sys
+from urllib.parse import urlsplit
 
 ESC = r'(?:[^<>&\n]|&(?:amp|lt|gt|quot|#39);)'
 IND = '<i>indisponível</i>'
@@ -13,11 +14,23 @@ ROW = re.compile(r'^<tr id="e(\d{4,})"( data-removed="1")?>((?:<td>(?:' + ESC
                  + r'|<i>(?:indisponível|desconhecido)</i>)*</td>){11})</tr>$')
 CELLS = re.compile(r'<td>(.*?)</td>')
 TEXT = re.compile(ESC + '+')
-URL = re.compile(r'https?://[^\s<>]+')
-EMAIL = re.compile(r'[^\s@<>&]+@[^\s@<>&]+\.[^\s@<>&]+')
-PHONE = re.compile(r'\+\d{1,3}(?: ?\d+)+')
+URL = re.compile(r'https?://[^\s<>\\]+')
+EMAIL = re.compile(r'[^\s@<>&]+@[^\s@<>&.]+(?:\.[^\s@<>&.]+)+')
+PHONE = re.compile(r'\+\d{1,3}(?: ?\d)+')
 NAMES = ['Status', 'Nº', 'Nome', 'Cidade', 'Distrito', 'Morada', 'Áreas',
          'Adicional', 'Website', 'E-mail', 'Telefone']
+
+
+def _url_ok(v):
+    """A URL the browser can open: a host and a valid port."""
+    if not URL.fullmatch(v):
+        return False
+    try:
+        u = urlsplit(v)
+        u.port
+    except ValueError:
+        return False
+    return bool(u.hostname)
 
 
 def _filled_ok(i, v):
@@ -33,8 +46,9 @@ def _filled_ok(i, v):
             return True
         s = v.split(' ')
         return all(x in SLUGS for x in s) and len(set(s)) == len(s)
-    pat = {8: URL, 9: EMAIL, 10: PHONE}[i]
-    return v == IND or bool(pat.fullmatch(v))
+    if i == 8:
+        return v == IND or _url_ok(v)
+    return v == IND or bool({9: EMAIL, 10: PHONE}[i].fullmatch(v))
 
 
 def check_row(line):

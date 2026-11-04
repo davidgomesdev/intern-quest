@@ -340,9 +340,24 @@ def _sort(dom, k):
     return re.search(rf'<th[^>]*data-k="{k}"[^>]*>', dom).group(0)
 
 
+def test_page_requires_chrome():
+    global _chrome
+    real, old = _chrome, os.environ.get("REQUIRE_CHROME")
+    _chrome, os.environ["REQUIRE_CHROME"] = (lambda: None), "1"
+    try:
+        test_page()
+    except AssertionError:
+        return
+    finally:
+        _chrome = real
+        os.environ.pop("REQUIRE_CHROME") if old is None else os.environ.update(REQUIRE_CHROME=old)
+    raise AssertionError("test_page skipped despite REQUIRE_CHROME")
+
+
 def test_page():
     chrome = _chrome()
     if not chrome:
+        assert not os.environ.get("REQUIRE_CHROME"), "REQUIRE_CHROME is set but no Chrome binary was found"
         print("     (test_page skipped: no Chrome found, set $CHROME)")
         return
     with open(os.path.join(FIX, "rows.txt"), encoding="utf-8") as f:

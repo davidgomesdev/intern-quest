@@ -1,0 +1,14 @@
+on: { pull_request: {}, push: { branches: [main] } }
+permissions: { contents: read }
+env:
+  REQUIRE_CHROME: "1"
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - run: scripts/check index.html
+      - if: github.event_name == 'pull_request'
+        run: scripts/check --diff origin/${{ github.base_ref }} --branch ${{ github.head_ref }}
+      - run: scripts/test

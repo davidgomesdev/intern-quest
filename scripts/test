@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Plain test runner: runs every test_* function below, exits 1 on first failure."""
-import os, re, shutil, subprocess, sys, tempfile, traceback, unicodedata
+import html, json, os, re, shutil, subprocess, sys, tempfile, traceback, unicodedata
 
 sys.dont_write_bytecode = True
 from importlib.machinery import SourceFileLoader
@@ -272,72 +272,166 @@ def _fold(s):
     return "".join(ch for ch in unicodedata.normalize("NFD", s) if not unicodedata.combining(ch)).lower()
 
 
+def _gen_rows(n=120):
+    """n generated rows: even n are filled (cidade São João for n%4==0, else Braga), odd n are empty."""
+    out = []
+    for i in range(1, n + 1):
+        cells = ["⬜", f"{i:04d}", f"Entidade {i:03d}"] + [""] * 8
+        if i % 2 == 0:
+            cells = ["✅", f"{i:04d}", f"Entidade {i:03d}", "São João" if i % 4 == 0 else "Braga", "Porto",
+                     "Rua X 1", "clinica", "Nota", "https://x.example", "a@x.example", "+351 210 000 000"]
+        out.append(row(cells, id_=f"e{i:04d}"))
+    assert all(check.check_row(r) == [] for r in out)
+    return out
+
+
+TRACE = """<script>addEventListener('load', () => {
+  const t = [], f = document.getElementById('filters'), h = () => t.push(location.hash);
+  document.querySelector('[data-p=next]').click(); h();
+  document.querySelector('th[data-k=nome] button').click(); h();
+  document.querySelector('th[data-k=nome] button').click(); h();
+  f.elements.nome.value = 'entidade 01'; f.dispatchEvent(new Event('input')); h();
+  f.querySelector('[name=a]').checked = true; f.dispatchEvent(new Event('input')); h();
+  document.querySelector('button.limpar').click(); h();
+  document.documentElement.dataset.trace = JSON.stringify(t);
+});</script>"""
+
+
+class Page:
+    """Headless-Chrome harness: index.html with its rows replaced by `fixture`."""
+
+    def __init__(self, chrome, tmp, fixture, extra=""):
+        self.chrome, self.tmp = chrome, tmp
+        lines = []
+        for l in _shell_lines():
+            lines.append(l)
+            if l.startswith("<head>"):
+                lines.append(f'<base href="file://{os.path.dirname(HERE)}/">')
+                lines.append("<script>window.onerror=e=>document.documentElement.dataset.err=e</script>")
+            if l.startswith('<tbody id="rows"'):
+                lines += fixture
+            if l.startswith("</body>"):
+                lines.insert(-1, extra)
+        self.path = os.path.join(tmp, f"page{abs(hash(extra))}{len(fixture)}.html")
+        with open(self.path, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines))
+
+    def dump(self, h=""):
+        r = subprocess.run([self.chrome, "--headless", "--disable-gpu", "--no-sandbox", "--dump-dom",
+                            f"--user-data-dir={self.tmp}/profile", f"file://{self.path}#{h}"],
+                           capture_output=True, text=True, timeout=60)
+        assert r.returncode == 0, r.stderr
+        assert "data-err" not in r.stdout, (h, "page error")
+        return r.stdout
+
+
+def _text(dom, pat):
+    m = re.search(pat, dom, re.S)
+    return re.sub(r"<[^>]+>", "", m.group(1)) if m else None
+
+
+def _count(dom): return _text(dom, r'<p id="count"[^>]*>(.*?)</p>')
+def _ativos(dom): return _text(dom, r'<span id="ativos">(.*?)</span>')
+def _pager(dom): return _text(dom, r'<nav class="pager"[^>]*>.*?<span>(.*?)</span>')
+def _disabled(dom): return len(re.findall(r'data-p="(?:prev|next)"[^>]*disabled', dom))
+def _ids(dom):
+    return re.findall(r'<tr id="(e\d+)"', dom.split('<tbody id="rows"', 1)[1].split("</tbody>", 1)[0])
+def _sort(dom, k):
+    return re.search(rf'<th[^>]*data-k="{k}"[^>]*>', dom).group(0)
+
+
 def test_page():
     chrome = _chrome()
     if not chrome:
         print("     (test_page skipped: no Chrome found, set $CHROME)")
         return
-    root = os.path.dirname(HERE)
     with open(os.path.join(FIX, "rows.txt"), encoding="utf-8") as f:
         fixture = f.read().rstrip("\n").split("\n")
-    lines = []
-    for l in _shell_lines():
-        lines.append(l)
-        if l.startswith("<head>"):
-            lines.append(f'<base href="file://{root}/">')
-            lines.append("<script>window.onerror=e=>document.documentElement.dataset.err=e</script>")
-        if l.startswith('<tbody id="rows"'):
-            lines += fixture
     with tempfile.TemporaryDirectory() as tmp:
-        page = os.path.join(tmp, "page.html")
-        with open(page, "w", encoding="utf-8") as f:
-            f.write("\n".join(lines))
+        small = Page(chrome, tmp, fixture).dump
+        for h, want, act in [
+                ("", "5 de 5 entidades, 4 com dados", ""), ("a=clinica", "2 de 5 entidades, 2 com dados", "(1 ativo)"),
+                ("a=clinica,neuropsicologia", "3 de 5 entidades, 3 com dados", "(2 ativos)"),
+                ("a=", "5 de 5 entidades, 4 com dados", ""),
+                ("cidade=lisboa", "1 de 5 entidades, 1 com dados", "(1 ativo)"),
+                ("cidade=LISBOA", "1 de 5 entidades, 1 com dados", "(1 ativo)"),
+                ("nome=agata", "1 de 5 entidades, 1 com dados", "(1 ativo)"),
+                ("nome=%C3%81GATA", "1 de 5 entidades, 1 com dados", "(1 ativo)"),
+                ("nome=epsilon", "1 de 5 entidades, 1 com dados", "(1 ativo)"),
+                ("c=Porto", "1 de 5 entidades, 1 com dados", "(1 ativo)"),
+                ("c=porto", "5 de 5 entidades, 4 com dados", ""),
+                ("d=Lisboa", "2 de 5 entidades, 2 com dados", "(1 ativo)"),
+                ("d=desconhecido", "1 de 5 entidades, 1 com dados", "(1 ativo)"),
+                ("estado=todo", "1 de 5 entidades, 0 com dados", "(1 ativo)"),
+                ("estado=ok", "4 de 5 entidades, 4 com dados", "(1 ativo)"),
+                ("rem=1", "6 de 6 entidades, 4 com dados", "(1 ativo)"),
+                ("nome=zzz", "0 de 5 entidades, 0 com dados", "(1 ativo)"),
+                ("p=999&a=bogus&ord=zzz", "5 de 5 entidades, 4 com dados", ""),
+                ("ord=morada", "5 de 5 entidades, 4 com dados", ""),
+                ("ord=__proto__", "5 de 5 entidades, 4 com dados", ""),
+                ("ord=constructor", "5 de 5 entidades, 4 com dados", ""),
+                ("ord=toString", "5 de 5 entidades, 4 com dados", ""),
+                ("a=constructor", "5 de 5 entidades, 4 com dados", ""),
+                ("a=__proto__,toString", "5 de 5 entidades, 4 com dados", "")]:
+            dom = small(h)
+            assert _count(dom) == want, (h, _count(dom), want)
+            assert _ativos(dom) == act, (h, _ativos(dom))
+        for h in ["ord=__proto__", "ord=constructor", "a=constructor"]:
+            dom = small(h)
+            assert _ids(dom) == ["e0001", "e0002", "e0003", "e0004", "e0005"], h
+            assert 'id="rows" role="rowgroup" class="ready"' in dom or 'class="ready"' in dom, h
 
-        def dump(h=""):
-            r = subprocess.run([chrome, "--headless", "--disable-gpu", "--no-sandbox", "--dump-dom",
-                                f"--user-data-dir={tmp}/profile", f"file://{page}#{h}"],
-                               capture_output=True, text=True, timeout=60)
-            assert r.returncode == 0, r.stderr
-            return r.stdout
+        dom = small("nome=zzz")
+        assert _ids(dom) == [] and not re.search(r'<div id="vazio"[^>]*hidden', dom)
+        assert _disabled(dom) == 4 and _pager(dom) == "Página 1 de 1"
+        assert _disabled(small()) == 4 and _pager(small()) == "Página 1 de 1"
+        assert _ids(small("ord=morada")) == ["e0001", "e0002", "e0003", "e0004", "e0005"]
 
-        def count(dom):
-            m = re.search(r'<p id="count"[^>]*>(.*?)</p>', dom, re.S)
-            return re.sub(r"<[^>]+>", "", m.group(1)) if m else ""
-
-        def ids(dom):
-            body = dom.split('<tbody id="rows"', 1)[1].split("</tbody>", 1)[0]
-            return re.findall(r'<tr id="(e\d+)"', body)
-
-        for h, want in [("", "5 de 5"), ("a=clinica", "2 de 5"), ("a=clinica,neuropsicologia", "3 de 5"),
-                        ("cidade=lisboa", "1 de 5"), ("cidade=LISBOA", "1 de 5"), ("d=desconhecido", "1 de 5"),
-                        ("estado=todo", "1 de 5"), ("rem=1", "6 de 6"), ("nome=zzz", "0 de 5"),
-                        ("p=999&a=bogus&ord=zzz", "5 de 5"), ("ord=morada", "5 de 5")]:
-            dom = dump(h)
-            assert "data-err" not in dom, (h, "page error")
-            assert count(dom).startswith(want), (h, count(dom), want)
-
-        dom = dump("nome=zzz")
-        assert ids(dom) == [] and not re.search(r"<div id=\"vazio\"[^>]*hidden", dom)
-        assert len(re.findall(r'data-p="(?:prev|next)"[^>]*disabled', dom)) == 4, "pager buttons must be disabled"
-        assert "pagina 1 de 1" in _fold(re.sub(r"<[^>]+>", "", dump())), "pager text"
-        assert ids(dump("ord=morada")) == ["e0001", "e0002", "e0003", "e0004", "e0005"]
-
-        names = {}
-        for l in fixture:
-            if 'data-removed' not in l:
-                names[re.match(r'<tr id="(e\d+)"', l).group(1)] = _fold(re.findall(r"<td>(.*?)</td>", l)[2])
+        names = {re.match(r'<tr id="(e\d+)"', l).group(1): _fold(re.findall(r"<td>(.*?)</td>", l)[2])
+                 for l in fixture if "data-removed" not in l}
         last = max(names, key=names.get)
-        assert last == "e0005"
-        assert ids(dump("ord=nome&dir=desc"))[0] == last
-        assert ids(dump("ord=cidade&dir=asc")) == ["e0001", "e0003", "e0004", "e0002", "e0005"]
-        assert ids(dump("ord=cidade&dir=desc")) == ["e0004", "e0003", "e0001", "e0002", "e0005"]
+        assert last == "e0005" and _ids(small("ord=nome&dir=desc"))[0] == last
+        dom = small("ord=nome&dir=desc")
+        assert 'aria-sort="descending"' in _sort(dom, "nome") and "aria-sort" not in _sort(dom, "n")
+        assert 'aria-sort="ascending"' in _sort(small(), "n")
+        assert _ids(small("ord=cidade&dir=asc")) == ["e0001", "e0003", "e0004", "e0002", "e0005"]
+        assert _ids(small("ord=cidade&dir=desc")) == ["e0004", "e0003", "e0001", "e0002", "e0005"]
+        assert _ids(small("ord=distrito&dir=desc")) == ["e0004", "e0001", "e0003", "e0002", "e0005"]
 
-        dom = dump()
+        dom = small()
         assert '<a href="tel:+351212345678">212 345 678</a>' in dom
         assert '<a href="tel:+442079460958">+44 20 7946 0958</a>' in dom
-        dom = dump("rem=1")
-        assert "Café &amp; Co" in dom and "&amp;amp;" not in dom
-        assert "removida da OPP" in dom
+        assert 'href="https://www.alfa.example/" target="_blank" rel="noopener"' in dom
+        assert 'href="mailto:geral@alfa.example"' in dom
+        assert 'aria-label="Preenchido"' in dom and 'aria-label="Por preencher"' in dom
+        assert re.search(r'class="area"><span aria-hidden="true">🩺</span>Clínica e da Saúde</span>'
+                         r'<span class="area"><span aria-hidden="true">🎓</span>Educação</span>', dom)
+        assert "<i>indisponível</i>" in dom
+        dom = small("rem=1")
+        assert "Café &amp; Co" in dom and "&amp;amp;" not in dom and "removida da OPP" in dom
+
+        big = Page(chrome, tmp, _gen_rows()).dump
+        dom = big()
+        assert _count(dom) == "120 de 120 entidades, 60 com dados" and _pager(dom) == "Página 1 de 3"
+        assert len(_ids(dom)) == 50 and _ids(dom)[0] == "e0001" and _disabled(dom) == 2
+        assert 'data-p="prev"' in dom and re.findall(r'data-p="prev"[^>]*disabled', dom)
+        assert not re.findall(r'data-p="next"[^>]*disabled', dom)
+        dom = big("p=2")
+        assert _pager(dom) == "Página 2 de 3" and _ids(dom)[0] == "e0051" and len(_ids(dom)) == 50 and _disabled(dom) == 0
+        dom = big("p=3")
+        assert _pager(dom) == "Página 3 de 3" and len(_ids(dom)) == 20 and _ids(dom)[-1] == "e0120"
+        assert re.findall(r'data-p="next"[^>]*disabled', dom) and not re.findall(r'data-p="prev"[^>]*disabled', dom)
+        assert _pager(big("p=999")) == "Página 3 de 3"
+        for h in ["p=0", "p=-5", "p=abc"]:
+            assert _pager(big(h)) == "Página 1 de 3", h
+        dom = big("p=2&nome=entidade%2001")
+        assert _count(dom).startswith("10 de 120") and _pager(dom) == "Página 1 de 1"
+        assert _count(big("cidade=sao")).startswith("30 de 120") and _count(big("cidade=S%C3%83O")).startswith("30 de 120")
+        assert _count(big("c=S%C3%A3o%20Jo%C3%A3o")).startswith("30 de 120")
+        assert _count(big("d=Porto")).startswith("60 de 120")
+        trace = json.loads(html.unescape(re.search(r'data-trace="([^"]*)"', Page(chrome, tmp, _gen_rows(), TRACE).dump()).group(1)))
+        assert trace == ["#p=2", "#ord=nome", "#ord=nome&dir=desc", "#nome=entidade+01&ord=nome&dir=desc",
+                         "#nome=entidade+01&a=clinica&ord=nome&dir=desc", ""], trace
 
 
 def main():

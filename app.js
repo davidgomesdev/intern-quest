@@ -41,9 +41,9 @@ function buildOptions() {
 function readState() {
   const q = new URLSearchParams(location.hash.slice(1)), g = k => q.get(k) || '';
   S = { ...defaults(), nome: g('nome'), cidade: g('cidade'), c: g('c'), d: g('d'),
-    a: g('a').split(',').filter(k => k in AREAS), rem: g('rem') === '1',
+    a: g('a').split(',').filter(k => Object.hasOwn(AREAS, k)), rem: g('rem') === '1',
     estado: ['ok', 'todo'].includes(g('estado')) ? g('estado') : 'todos',
-    ord: g('ord') in KEY ? g('ord') : 'n', dir: g('dir') === 'desc' ? 'desc' : 'asc', p: parseInt(g('p'), 10) || 1 };
+    ord: Object.hasOwn(KEY, g('ord')) ? g('ord') : 'n', dir: g('dir') === 'desc' ? 'desc' : 'asc', p: parseInt(g('p'), 10) || 1 };
   toForm();
   S.c = form.elements.c.value; S.d = form.elements.d.value; // drop values that are not in the lists
 }

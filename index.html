@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Intern Quest · Estágios de Psicologia</title>
+<script>document.documentElement.classList.add('js')</script>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="pagina">
+<header class="topo">
+  <h1>Intern Quest <span class="marca" aria-hidden="true">✦</span></h1>
+  <p class="sub">Encontra onde fazer o teu Ano Profissional Júnior em Psicologia. Procura por cidade, distrito ou área de atuação.</p>
+  <p class="aviso" role="note"><span aria-hidden="true">💡</span> <strong>Antes de contactar:</strong> esta lista vem da Ordem dos Psicólogos e não quer dizer que haja vaga. As moradas e os contactos foram recolhidos automaticamente e podem ter erros, por isso confirma sempre no site da entidade. Fonte: <a href="https://www.ordemdospsicologos.pt/pt/estagios/entidades">lista de entidades da OPP</a>.</p>
+</header>
+<noscript><p class="semjs">Sem JavaScript vês todas as entidades, sem filtros nem ordenação. Usa a pesquisa do navegador (Ctrl+F).</p></noscript>
+
+<main>
+<details id="painel" open>
+<summary>Filtros <span id="ativos">(2 ativos)</span></summary>
+<form id="filters" role="search" aria-label="Filtrar entidades">
+  <div class="campos">
+    <label class="campo nome">Nome da entidade <input type="search" name="nome" autocomplete="off" placeholder="ex.: Santa Casa, clínica, agrupamento…"></label>
+    <label class="campo">Cidade <input type="search" name="cidade" list="cidades" autocomplete="off"></label>
+    <label class="campo">Só esta cidade <select name="c"><option value="">Todas</option><option>Braga</option><option>Cascais</option><option>Coimbra</option><option>Vila Nova de Gaia</option></select></label>
+    <label class="campo">Distrito <select name="d"><option value="">Todos</option><option>Aveiro</option><option>Lisboa</option><option>Porto</option><option value="desconhecido">Desconhecido</option></select></label>
+  </div>
+  <datalist id="cidades"><option value="Braga"><option value="Cascais"><option value="Coimbra"><option value="Vila Nova de Gaia"></datalist>
+  <fieldset>
+    <legend>Áreas de atuação</legend>
+    <div class="opcoes">
+      <label class="toggle"><input type="checkbox" name="a" value="clinica" checked><span><span aria-hidden="true">🩺</span> Clínica e da Saúde</span></label>
+      <label class="toggle"><input type="checkbox" name="a" value="neuropsicologia"><span><span aria-hidden="true">🧠</span> Neuropsicologia</span></label>
+      <label class="toggle"><input type="checkbox" name="a" value="psicoterapia"><span><span aria-hidden="true">💬</span> Psicoterapia</span></label>
+      <label class="toggle"><input type="checkbox" name="a" value="educacao"><span><span aria-hidden="true">🎓</span> Educação</span></label>
+      <label class="toggle"><input type="checkbox" name="a" value="organizacoes"><span><span aria-hidden="true">💼</span> Trabalho, Social e Organizações</span></label>
+      <label class="toggle"><input type="checkbox" name="a" value="justica"><span><span aria-hidden="true">⚖️</span> Justiça / Forense</span></label>
+      <label class="toggle"><input type="checkbox" name="a" value="comunitaria"><span><span aria-hidden="true">🤝</span> Comunitária / Intervenção Social</span></label>
+      <label class="toggle"><input type="checkbox" name="a" value="desporto"><span><span aria-hidden="true">🏅</span> Desporto</span></label>
+      <label class="toggle"><input type="checkbox" name="a" value="desconhecido"><span><span aria-hidden="true">❔</span> Desconhecido</span></label>
+    </div>
+  </fieldset>
+  <div class="grupo">
+    <fieldset class="campo">
+      <legend>Estado</legend>
+      <div class="seg">
+        <label class="toggle"><input type="radio" name="estado" value="todos" checked><span>Todas</span></label>
+        <label class="toggle"><input type="radio" name="estado" value="ok"><span>✅ Com dados</span></label>
+        <label class="toggle"><input type="radio" name="estado" value="todo"><span>⬜ Ainda sem dados</span></label>
+      </div>
+    </fieldset>
+    <label class="check"><input type="checkbox" name="rem" value="1" checked> Mostrar as que saíram da lista da OPP</label>
+    <button type="reset" class="limpar">Limpar filtros</button>
+  </div>
+</form>
+</details>
+
+<div class="barra">
+  <p id="count" aria-live="polite"><strong>1204</strong> de 6345 entidades, 802 com dados</p>
+  <nav class="pager" aria-label="Paginação">
+    <button type="button" data-p="prev" disabled>‹ Anterior</button>
+    <span>Página 1 de 25</span>
+    <button type="button" data-p="next">Seguinte ›</button>
+  </nav>
+</div>
+
+<div id="vazio" hidden>
+  <span class="grande" aria-hidden="true">🔍</span>
+  <p><strong>Nenhuma entidade com estes filtros.</strong> Experimenta tirar uma área ou procurar pelo distrito em vez da cidade.</p>
+  <button type="reset" form="filters">Limpar filtros</button>
+</div>
+
+<div class="tabela">
+<table role="table" aria-label="Entidades de estágio da OPP">
+<thead role="rowgroup"><tr role="row">
+<th role="columnheader" scope="col" data-k="estado"><button type="button">Estado</button></th>
+<th role="columnheader" scope="col" data-k="n" aria-sort="ascending"><button type="button">Nº</button></th>
+<th role="columnheader" scope="col" data-k="nome"><button type="button">Nome</button></th>
+<th role="columnheader" scope="col" data-k="cidade"><button type="button">Cidade</button></th>
+<th role="columnheader" scope="col" data-k="distrito"><button type="button">Distrito</button></th>
+<th role="columnheader" scope="col" class="nosort">Morada</th>
+<th role="columnheader" scope="col" data-k="areas"><button type="button">Áreas</button></th>
+<th role="columnheader" scope="col" class="nosort">Adicional</th>
+<th role="columnheader" scope="col" class="nosort">Website</th>
+<th role="columnheader" scope="col" class="nosort">E-mail</th>
+<th role="columnheader" scope="col" class="nosort">Telefone</th>
+</tr></thead>
+<tbody id="rows" role="rowgroup">
+</tbody>
+</table>
+</div>
+
+<nav class="pager pager-fim" aria-label="Paginação, fim da lista">
+  <button type="button" data-p="prev" disabled>‹ Anterior</button>
+  <span>Página 1 de 25</span>
+  <button type="button" data-p="next">Seguinte ›</button>
+</nav>
+</main>
+
+<footer>
+  Lista de base: <a href="https://www.ordemdospsicologos.pt/pt/estagios/entidades">ordemdospsicologos.pt</a>, atualizada a 4 de novembro de 2026. Moradas, áreas e contactos são acrescentados aos poucos, uma entidade de cada vez.
+</footer>
+</div>
+
+<script src="app.js" defer></script>
+</body>
+</html>

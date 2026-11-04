@@ -83,21 +83,21 @@ p.write_text('\n'.join(lines))
 EOF
 ```
 
-## 5. Verify
+## 5. Verify, commit
 
 ```bash
 git diff --numstat          # must print exactly: 1  1  index.html
-scripts/check index.html
-scripts/check --diff origin/main --branch feat/eID-fill
-```
-
-If a check fails, fix the row file and repeat step 4. Do not edit any other line or file.
-
-## 6. Commit, push, PR
-
-```bash
+scripts/check.py index.html
 git add index.html
 git commit -m "feat(data): fill eID"
+scripts/check.py --diff origin/main --branch feat/eID-fill   # reads committed changes only
+```
+
+If a check fails, fix the row file, repeat step 4, then `git commit --amend --no-edit` and re-run the checks. Do not edit any other line or file.
+
+## 6. Push, PR
+
+```bash
 git push -u origin feat/eID-fill
 gh pr create --title "feat(data): fill eID" --body "Fills eID (NOME).
 

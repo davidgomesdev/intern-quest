@@ -80,6 +80,26 @@ def test_check_row_rejects():
         assert check.check_row(line), name
 
 
+def test_check_rejects_unusable_urls():
+    for bad in ["https://a:99999", "https://[", "https:///x", "http://a\\b"]:
+        assert check.check_row(filled(c8=bad)) != [], bad
+    assert check.check_row(filled(c8="https://a.example:8080/x?y=1")) == []
+
+
+def test_check_regexes_are_linear():
+    import time
+    for good in ["+351 212 345 678", "+44 20 7946 0958", "+351212345678"]:
+        assert check.check_row(filled(c10=good)) == [], good
+    for bad in ["+351 " + "1" * 5000 + "x", "+351 " + "1 " * 2500 + "x"]:
+        t = time.perf_counter()
+        assert check.check_row(filled(c10=bad)) != []
+        assert time.perf_counter() - t < 1, "phone regex is slow"
+    for bad in ["a@" + "b" * 10000, "a@" + "b." * 5000 + "@", "a@" + "." * 10000]:
+        t = time.perf_counter()
+        assert check.check_row(filled(c9=bad)) != []
+        assert time.perf_counter() - t < 1, "e-mail regex is slow"
+
+
 def test_check_file(tmp=None):
     import tempfile
     def run(lines):
@@ -300,7 +320,7 @@ TRACE = """<script>addEventListener('load', () => {
 class Page:
     """Headless-Chrome harness: index.html with its rows replaced by `fixture`."""
 
-    def __init__(self, chrome, tmp, fixture, extra=""):
+    def __init__(self, chrome, tmp, fixture, extra="", script=None):
         self.chrome, self.tmp = chrome, tmp
         lines = []
         for l in _shell_lines():
@@ -312,16 +332,18 @@ class Page:
                 lines += fixture
             if l.startswith("</body>"):
                 lines.insert(-1, extra)
-        self.path = os.path.join(tmp, f"page{abs(hash(extra))}{len(fixture)}.html")
+        if script:
+            lines = [l.replace('src="app.js"', f'src="file://{script}"') for l in lines]
+        self.path = os.path.join(tmp, f"page{abs(hash((extra, script)))}{len(fixture)}.html")
         with open(self.path, "w", encoding="utf-8") as f:
             f.write("\n".join(lines))
 
-    def dump(self, h=""):
+    def dump(self, h="", allow_err=False):
         r = subprocess.run([self.chrome, "--headless", "--disable-gpu", "--no-sandbox", "--dump-dom",
                             f"--user-data-dir={self.tmp}/profile", f"file://{self.path}#{h}"],
                            capture_output=True, text=True, timeout=60)
         assert r.returncode == 0, r.stderr
-        assert "data-err" not in r.stdout, (h, "page error")
+        assert allow_err or "data-err" not in r.stdout, (h, "page error")
         return r.stdout
 
 
@@ -360,6 +382,7 @@ def test_page():
         assert not os.environ.get("REQUIRE_CHROME"), "REQUIRE_CHROME is set but no Chrome binary was found"
         print("     (test_page skipped: no Chrome found, set $CHROME)")
         return
+    root = os.path.dirname(HERE)
     with open(os.path.join(FIX, "rows.txt"), encoding="utf-8") as f:
         fixture = f.read().rstrip("\n").split("\n")
     with tempfile.TemporaryDirectory() as tmp:
@@ -444,6 +467,26 @@ def test_page():
         assert _count(big("cidade=sao")).startswith("30 de 120") and _count(big("cidade=S%C3%83O")).startswith("30 de 120")
         assert _count(big("c=S%C3%A3o%20Jo%C3%A3o")).startswith("30 de 120")
         assert _count(big("d=Porto")).startswith("60 de 120")
+        bad_url = fixture[0].replace("https://www.alfa.example", "https://a:99999")
+        assert bad_url != fixture[0]
+        dom = Page(chrome, tmp, [bad_url] + fixture[1:]).dump()
+        assert _count(dom) == "5 de 5 entidades, 4 com dados" and 'class="ready"' in dom
+        assert "https://a:99999" in dom and 'href="https://a:99999' not in dom
+
+        runtime = os.path.join(tmp, "runtime.js")
+        with open(os.path.join(root, "app.js"), encoding="utf-8") as f:
+            src = f.read()
+        assert "  buildOptions();\n  if" in src
+        with open(runtime, "w", encoding="utf-8") as f:
+            f.write(src.replace("  buildOptions();\n  if", "  throw new Error('boom');\n  if"))
+        syntax = os.path.join(tmp, "syntax.js")
+        with open(syntax, "w", encoding="utf-8") as f:
+            f.write("this is not javascript(")
+        for script in (runtime, syntax):
+            dom = Page(chrome, tmp, fixture, script=script).dump(allow_err=True)
+            assert not re.search(r'<html[^>]*class="[^"]*\bjs\b', dom), script
+            assert len(_ids(dom)) == 6, script
+
         trace = json.loads(html.unescape(re.search(r'data-trace="([^"]*)"', Page(chrome, tmp, _gen_rows(), TRACE).dump()).group(1)))
         assert trace == ["#p=2", "#ord=nome", "#ord=nome&dir=desc", "#nome=entidade+01&ord=nome&dir=desc",
                          "#nome=entidade+01&a=clinica&ord=nome&dir=desc", ""], trace

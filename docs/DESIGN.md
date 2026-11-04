@@ -30,7 +30,6 @@ Why:
 <!doctype html><html lang="pt-PT"><head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Intern Quest · Estágios de Psicologia</title>
-  <script>document.documentElement.classList.add('js')</script>   <!-- 1 line, before CSS -->
   <link rel="stylesheet" href="app.css"><script src="app.js" defer></script>
 </head><body>
   <header>title, disclaimer (§6.5), OPP link</header>
@@ -46,6 +45,7 @@ Why:
 ```
 
 - **Raw rows and paged rendering:** CSS `.js #rows:not(.ready){display:none}` hides the full tbody before first paint, so the browser parses the 6,345 rows but never lays them out. `app.js` (deferred) reads them once into `ROWS`, keeps a reference to each `<tr>`, and then calls `tbody.replaceChildren(...pageRows)` to show only the current page. The rendered rows are the original nodes moved in and out of the tbody, so the code never builds rows from strings.
+- **`js` class:** `app.js` adds it as its first statement and removes it again if initialisation throws, so a failed or unsupported script leaves the whole table visible.
 - **No JS:** the `js` class is never added, so the whole table shows, `#filters`/`#pager` are hidden (`html:not(.js) #filters{display:none}`) and the `<noscript>` note shows. Áreas show as raw slugs and URLs are plain text. That is acceptable for read-only use.
 - **Row lines** start at column 0 with no indentation, so `grep '^<tr id="e0001">'` works.
 - **Page weight** (measured on the real 6,345 names with `gzip -6`):

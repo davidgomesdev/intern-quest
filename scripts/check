@@ -1,0 +1,96 @@
+#!/usr/bin/env python3
+"""Validate index.html rows. Usage: scripts/check FILE"""
+import re
+import sys
+
+ESC = r'(?:[^<>&\n]|&(?:amp|lt|gt|quot|#39);)'
+IND = '<i>indisponível</i>'
+DESC = '<i>desconhecido</i>'
+SLUGS = {'clinica', 'neuropsicologia', 'psicoterapia', 'educacao',
+         'organizacoes', 'justica', 'comunitaria', 'desporto'}
+ROW = re.compile(r'^<tr id="e(\d{4,})"( data-removed="1")?>((?:<td>(?:' + ESC
+                 + r'|<i>(?:indisponível|desconhecido)</i>)*</td>){11})</tr>$')
+CELLS = re.compile(r'<td>(.*?)</td>')
+TEXT = re.compile(ESC + '+')
+URL = re.compile(r'https?://[^\s<>]+')
+EMAIL = re.compile(r'[^\s@<>&]+@[^\s@<>&]+\.[^\s@<>&]+')
+PHONE = re.compile(r'\+\d{1,3}(?: ?\d+)+')
+NAMES = ['Status', 'Nº', 'Nome', 'Cidade', 'Distrito', 'Morada', 'Áreas',
+         'Adicional', 'Website', 'E-mail', 'Telefone']
+
+
+def _filled_ok(i, v):
+    """Is v a valid cell value for column index i on a FILLED row?"""
+    if i == 2:
+        return bool(TEXT.fullmatch(v))
+    if i in (3, 5, 7):
+        return v == IND or bool(TEXT.fullmatch(v))
+    if i == 4:
+        return v == DESC or bool(TEXT.fullmatch(v))
+    if i == 6:
+        if v == DESC:
+            return True
+        s = v.split(' ')
+        return all(x in SLUGS for x in s) and len(set(s)) == len(s)
+    pat = {8: URL, 9: EMAIL, 10: PHONE}[i]
+    return v == IND or bool(pat.fullmatch(v))
+
+
+def check_row(line):
+    m = ROW.match(line)
+    if not m:
+        return ['line does not match row shape (id, optional data-removed, 11 cells)']
+    rid, cells = m.group(1), CELLS.findall(m.group(3))
+    if len(cells) != 11:
+        return [f'expected 11 cells, got {len(cells)}']
+    errs = []
+    status = cells[0]
+    if status not in ('⬜', '✅'):
+        return [f'Status: unknown value {status!r}']
+    if cells[1] != rid:
+        errs.append(f'Nº: {cells[1]!r} does not match id {rid}')
+    if not TEXT.fullmatch(cells[2]):
+        errs.append('Nome: must be non-empty plain/escaped text')
+    for i in range(3, 11):
+        v = cells[i]
+        if status == '⬜':
+            if v != '':
+                errs.append(f'{NAMES[i]}: must be empty on a ⬜ row')
+        elif not _filled_ok(i, v):
+            errs.append(f'{NAMES[i]}: invalid value {v!r} on a ✅ row')
+    return errs
+
+
+def check_file(path):
+    errs, last = [], -1
+    with open(path, encoding='utf-8') as f:
+        for n, line in enumerate(f, 1):
+            line = line.rstrip('\n')
+            if '<tr' not in line:
+                continue
+            errs += [f'line {n}: {e}' for e in check_row(line)]
+            m = re.search(r'<tr id="e(\d+)"', line)
+            if m:
+                rid = int(m.group(1))
+                if rid <= last:
+                    errs.append(f'line {n}: id e{m.group(1)} not strictly ascending')
+                last = rid
+    return errs
+
+
+def main(argv):
+    if len(argv) != 2:
+        print('usage: scripts/check FILE', file=sys.stderr)
+        return 2
+    errs = check_file(argv[1])
+    text = open(argv[1], encoding='utf-8').read()
+    todo = len(re.findall(r'^<tr id="e\d+"[^>]*><td>⬜', text, re.M))
+    done = len(re.findall(r'^<tr id="e\d+"[^>]*><td>✅', text, re.M))
+    for e in errs:
+        print(e)
+    print(f'rows: {todo + done}  ⬜ {todo}  ✅ {done}')
+    return 1 if errs else 0
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv))

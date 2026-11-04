@@ -1,6 +1,6 @@
 ---
 name: fill-batch
-description: Use when given a list of OPP protocol numbers (optionally a Cidade, default Lisboa, and a count N; or nothing for 5 random Lisboa ones) to fill in index.html, one subagent per entity.
+description: Use when given a list of OPP protocol numbers (a count N, or nothing for 5 random ones) to fill in index.html, one subagent per entity.
 ---
 
 # Fill a batch of entities
@@ -9,21 +9,18 @@ You dispatch; you never edit `index.html` yourself. Each entity gets one subagen
 
 ## 1. Build the id list
 
-Args: an optional city (any non-numeric words, e.g. `Lisboa`, `Vila Nova de Gaia`) followed by an optional count N, or a list of ids. City defaults to `Lisboa`.
-
-- `Lisboa 5` → 5 from Lisboa. `5` → 5 from Lisboa. `Porto 3` → 3 from Porto. Nothing → 5 random from Lisboa.
-- Explicit ids: zero-pad each to at least 4 digits (`7` → `0007`). The city is ignored.
-
-Unfilled rows have an empty Cidade cell, so the city is matched against the Nome (case-insensitive). Entities in the city whose name omits it are not picked up; that is a known limit.
-
-Count N: first N matching unfilled rows. Nothing: 5 random ones. `CITY` is the city, as given.
+Given ids: zero-pad each to at least 4 digits (`7` → `0007`).
+Given a count N instead: take the first N unfilled rows.
 
 ```bash
-grep -i '^<tr id="e[0-9]*"><td>⬜.*CITY' index.html | grep -o '^<tr id="e[0-9]*"' | grep -o '[0-9]\{4,\}' | head -N              # count
-grep -i '^<tr id="e[0-9]*"><td>⬜.*CITY' index.html | grep -o '^<tr id="e[0-9]*"' | grep -o '[0-9]\{4,\}' | sort -R | head -5   # random
+grep -o '^<tr id="e[0-9]*"><td>⬜' index.html | head -N | grep -o '[0-9]\{4,\}'
 ```
 
-If fewer than N match, use what there is and say so in the report.
+Given nothing: take 5 random unfilled rows.
+
+```bash
+grep -o '^<tr id="e[0-9]*"><td>⬜' index.html | sort -R | head -5 | grep -o '[0-9]\{4,\}'
+```
 
 ## 2. Keep only dispatchable ids
 

@@ -136,6 +136,14 @@ def test_check_diff():
     assert cd(diff((r1, R("0001", attr=' data-removed="1"'))), html, None) == []
     assert cd(diff((R("0001", attr=' data-removed="1"'), r1)), html, None) == []
     assert cd(diff((None, f2)), html, None)
+    # sync mode judges only row lines
+    assert cd(diff((None, r2), extra=[("<p>a</p>", "<p>b</p>")]), ["index.html", "app.js"], None) == []
+    # brand-new index.html (diff from /dev/null)
+    new = "\n".join(["diff --git a/index.html b/index.html", "new file mode 100644",
+                    "--- /dev/null", "+++ b/index.html", "@@ -0,0 +1,5 @@",
+                    "+<!doctype html>", "+<table>", "+" + r1, "+" + r2, "+</table>"]) + "\n"
+    assert cd(new, ["index.html", "scripts/check"], None) == []
+    assert cd(new.replace("+" + r2, "+" + f2), ["index.html"], None)
     assert cd(diff((r1, None)), html, None)
     assert cd(diff((None, R("0002", name=""))), html, None)
     assert cd(diff((None, r2), (r1, f1)), html, None)

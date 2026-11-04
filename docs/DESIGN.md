@@ -256,7 +256,7 @@ TEXT  = rf'{ESC}+'
 IND   = r'<i>indisponível</i>'
 DESC  = r'<i>desconhecido</i>'
 SLUG  = r'(?:clinica|neuropsicologia|psicoterapia|educacao|organizacoes|justica|comunitaria|desporto)'
-ROW   = re.compile(r'^<tr id="e(\d{4})"( data-removed="1")?>((?:<td>(?:' + ESC + r'|<i>(?:indisponível|desconhecido)</i>)*</td>){11})</tr>$')
+ROW   = re.compile(r'^<tr id="e(\d{4,})"( data-removed="1")?>((?:<td>(?:' + ESC + r'|<i>(?:indisponível|desconhecido)</i>)*</td>){11})</tr>$')
 CELLS = re.compile(r'<td>(.*?)</td>')
 ```
 
@@ -272,7 +272,7 @@ Per-cell rules, applied after `ROW` matches and `CELLS.findall` returns exactly 
 | 7 | Áreas | `SLUG( SLUG)*` (no duplicates) or `DESC` | empty |
 | 9 | Website | `https?://[^\s<>]+` or `IND` | empty |
 | 10 | E-mail | `[^\s@<>&]+@[^\s@<>&]+\.[^\s@<>&]+` or `IND` | empty |
-| 11 | Telefone | `\d[\d ]*\d` or `IND` | empty |
+| 11 | Telefone | `\+\d{1,3}(?: ?\d)+` (e.g. `+351 212 345 678`; rendered as `tel:` link, label drops `+351 `) or `IND` | empty |
 
 File checks:
 - Every line containing `<tr` matches `ROW`.
@@ -342,7 +342,7 @@ This adds no test framework and no dependencies. Locally, test 3 is skipped when
 
 1. **`data-removed` vs the grep contract (§5, §7.1).** `grep -m1 '<td>⬜</td>'` will hand removed rows to subagents. Fix: the orchestrator uses `grep -m1 '^<tr id="e[0-9]*"><td>⬜'`, which excludes rows with the attribute. The subagent read `grep '^<tr id="e0001">'` then finds nothing for a removed row, which is correct, but the skill must say "no match means stop".
 2. **§3 repo contents is incomplete.** It omits `scripts/sync.py`, `scripts/check.py`, the CI workflow, `app.css`/`app.js`, `.nojekyll` and test fixtures.
-3. **Telefone "digits and spaces only" (§4).** This forbids `+351`, extensions and a second number. Either allow `\+?\d[\d ]*\d` and `;`-separated numbers, or accept the loss (extra numbers go in Adicional). The same applies to a second e-mail. The validator follows the spec until you decide.
+3. **Telefone "digits and spaces only" (§4).** This forbids `+351`, extensions and a second number. Either allow `\+?\d[\d ]*\d` and `;`-separated numbers, or accept the loss (extra numbers go in Adicional). The same applies to a second e-mail. **Resolved:** stored as `+<cc> <digits>` (SPEC §4); the `tel:` href keeps `+351`, the label drops it. Extra numbers go in Adicional.
 4. **§6.2 says filters exist "only" on Nome/Cidade/Áreas/Distrito,** but Status (§6.2) and "show removed" (§7.5) are filters too. This is wording only.
 5. **§8 seed check "all start ⬜".** This holds only on an empty file. The seed must never run against a populated `index.html` (solved by D1).
 6. **Ids are 4 digits (`e0001`).** They overflow at protocol 10000 (max today: 7498). The regex hard-codes `\d{4}`; widening it later is a whole-file change.

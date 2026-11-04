@@ -91,6 +91,6 @@ All text passes AA. In light mode, links and muted text are AA but not AAA (5.4�
 
 ## Decisions for you (max 3)
 
-1. **Page size.** Cards are about 3× taller than table rows, so 100 cards per page is a long scroll. Recommend **50 per page** (SPEC §6.4 says 100 [CALL]).
-2. **Sort pills.** SPEC §6.1 makes every column sortable, but sorting by Morada, Adicional, Website or E-mail is rarely useful. Recommend showing **Nº, Nome, Cidade, Distrito, Estado** only; the other `th` would stay in the markup with no button. This needs a SPEC change, otherwise keep all 11.
-3. **Voice.** Informal "tu" (as built) or neutral/impersonal ("Encontre…", "Confirme…"). Recommend **"tu"**: the readers are recent graduates and it matches the friendlier look.
+1. **Page size (DECIDED: 50).** Cards are about 3× taller than table rows, so 100 cards per page is a long scroll. Recommend **50 per page** (SPEC §6.4 says 100 [CALL]).
+2. **Sort pills (DECIDED: Estado, Nº, Nome, Cidade, Distrito, Áreas; SPEC §6.1 updated).** SPEC §6.1 makes every column sortable, but sorting by Morada, Adicional, Website or E-mail is rarely useful. Recommend showing **Nº, Nome, Cidade, Distrito, Estado** only; the other `th` would stay in the markup with no button. This needs a SPEC change, otherwise keep all 11.
+3. **Voice (DECIDED: "tu").** Informal "tu" (as built) or neutral/impersonal ("Encontre…", "Confirme…"). Recommend **"tu"**: the readers are recent graduates and it matches the friendlier look.

@@ -93,14 +93,14 @@ Rules:
 ## 6. The page
 
 ### 6.1 Table
-All 11 columns shown. Header click sorts (asc/desc, toggling), numeric sort for Nº, locale-aware sort (pt) for text. `indisponível` and empty cells sort last.
+All 11 columns shown. **Sortable columns: Estado, Nº, Nome, Cidade, Distrito, Áreas only**; the others (Morada, Adicional, Website, E-mail, Telefone) are not sortable. Header click sorts (asc/desc, toggling), numeric sort for Nº, locale-aware sort (pt) for text, first área label for Áreas. `indisponível`, `desconhecido` and empty cells sort last in both directions.
 
 ### 6.2 Filters
 - Status: All / ✅ / ⬜ (default: **All**).
-- Filters exist **only** on Nome, Cidade, Áreas (plus Distrito, see below). All other columns are sortable but not filterable.
+- Filters exist **only** on Nome, Cidade, Áreas (plus Distrito, see below). All other columns are neither sortable nor filterable.
 - Nome: text "contains" box, accent- and case-insensitive.
 - Cidade: text search with autocomplete from the cities present, plus exact-match dropdown **[CALL: both]**.
-- Áreas: multi-select; **any-of** semantics by default, with a toggle for all-of.
+- Áreas: multi-select; **any-of** semantics only (an entity matches if it has at least one selected área). No all-of toggle.
 - Distrito: exact-match dropdown **[CALL: added, since district is the "near" mechanism; drop it if you disagree]**.
 - Filters combine with AND. A "clear all" button, and a visible "N of 6,345 shown" count.
 - Filter and sort state is kept in the URL hash so a view can be shared and bookmarked.
@@ -109,7 +109,7 @@ All 11 columns shown. Header click sorts (asc/desc, toggling), numeric sort for 
 v1: "near" means same city or same district. Distrito is best effort (often `<i>desconhecido</i>`), so a district filter will miss entities with unknown district; the city filter remains the reliable one. Distance search is **out of scope** for v1 (see 9).
 
 ### 6.4 Performance
-6,345 rows in one DOM table must stay responsive. Rendering is by filtered slice (virtual or paged, 100 rows per page by default) **[CALL]**; the raw rows stay in the HTML so `grep` works and the page works without JS for reading.
+6,345 rows in one DOM table must stay responsive. Rendering is by filtered slice (virtual or paged, 50 rows per page) **[CALL]**; the raw rows stay in the HTML so `grep` works and the page works without JS for reading.
 
 ### 6.5 Disclaimers
 A visible note: the list is from OPP, informational, and does not imply a vacancy; data is gathered automatically and may be wrong; link to the OPP source page and to the entity's own site.

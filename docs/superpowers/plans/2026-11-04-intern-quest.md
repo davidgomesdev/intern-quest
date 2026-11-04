@@ -19,10 +19,10 @@
 - Áreas slugs: `clinica neuropsicologia psicoterapia educacao organizacoes justica comunitaria desporto`, space-separated in the cell, plus `<i>desconhecido</i>` alone. Never both.
 - Telefone stored as `+<country code> <digits>` (e.g. `+351 212 345 678`); shown as a `tel:` link whose label drops a leading `+351 `.
 - Removed-from-OPP rows get `data-removed="1"` after the id; they are never deleted. Orchestrator grep: `^<tr id="e[0-9]*"><td>⬜` (skips removed rows).
-- Page size 100 rows. Filters only on Nome, Cidade (text + dropdown), Distrito (dropdown), Áreas (any-of only), Estado, "mostrar removidas". Every column sortable; missing values sort last in both directions.
+- Page size 50 rows. Filters only on Nome, Cidade (text + dropdown), Distrito (dropdown), Áreas (any-of only), Estado, "mostrar removidas". Sortable only: Estado, Nº, Nome, Cidade, Distrito, Áreas (other `th` carry no button); missing values sort last in both directions.
 - Source: `https://www.ordemdospsicologos.pt/pt/estagios/entidades`, `table.mainlisting`, columns `Nº Protocolo`, `Nome`. `sync` aborts below 1,000 parsed rows (override flag `--min-rows` for tests).
 - Git: work in a worktree on branch `feat/initial-implementation`; conventional commits; no co-author trailers; never `--no-verify` or unsigned commits; open a PR with `gh pr create`; never merge. The repo-local git config already sets the noreply email and key `91F8FED4E82FB60F`.
-- UI language Portuguese (`lang="pt-PT"`); disclaimer per SPEC 6.5 visible on the page.
+- UI language Portuguese (`lang="pt-PT"`), informal "tu" copy as in the mockup; disclaimer per SPEC 6.5 visible on the page.
 
 ## Overrides of docs/DESIGN.md (SPEC.md changed after the design was drafted)
 
@@ -101,6 +101,7 @@
 
 **Files:**
 - Create: `app.css`, `app.js`, `tests/rows.txt`
+- Reference (copy markup and styles from it, do not redesign): `docs/mockup/index.html`, `docs/mockup/app.css`, `docs/mockup/DESIGN-VISUAL.md`
 - Modify: `scripts/test`
 
 **Interfaces:**
@@ -109,9 +110,9 @@
 
 `tests/rows.txt` holds six fixture rows: e0001 ✅ Cascais/Lisboa, `clinica educacao`, `+351 212 345 678`; e0002 ⬜ empty; e0003 ✅ Lisboa/Lisboa, `clinica`; e0004 ✅ Porto/Porto, `neuropsicologia`, `+44 20 7946 0958`; e0005 ✅ all `<i>indisponível</i>` with Áreas and Distrito `<i>desconhecido</i>`; e0006 ⬜ `data-removed="1"` named `Café &amp; Co`.
 
-- [ ] **Step 1: Write failing test `test_page`**. It builds a temp HTML from `index.html` (drop lines starting `<tr id="e`, insert `tests/rows.txt`, add `<base href="file://REPO/">` and `window.onerror=e=>document.documentElement.dataset.err=e`), runs headless Chrome `--dump-dom` per hash (Chrome path from `$CHROME`, then `google-chrome`, `chromium`, the macOS app path; skip with a printed notice if none), and asserts on the dumped DOM: no `data-err`; `#a=clinica` count starts `2 de 5`; `#a=clinica,neuropsicologia` → `3 de 5` (any-of); `#cidade=lisboa` → `1 de 5` (accent-insensitive: also `#cidade=LISBOA`); `#d=desconhecido` → `1 de 5`; `#estado=todo` → `1 de 5`; `#rem=1` → `6 de 6`; `#nome=zzz` → `0 de 5`, empty tbody, pager buttons disabled; `#ord=nome&dir=desc` first row is the id whose Nome sorts last in `pt` collation (compute it from `tests/rows.txt` in the test and assert it); `#ord=cidade&dir=desc` puts e0002 and e0005 (missing Cidade) last, and same with `dir=asc`; `#p=999&a=bogus&ord=zzz` → `5 de 5`, no error; e0001 phone renders `href="tel:+351212345678"` with label `212 345 678`; e0004 label is `+44 20 7946 0958`; with `#rem=1` the `Café & Co` text decodes correctly.
+- [ ] **Step 1: Write failing test `test_page`**. It builds a temp HTML from `index.html` (drop lines starting `<tr id="e`, insert `tests/rows.txt`, add `<base href="file://REPO/">` and `window.onerror=e=>document.documentElement.dataset.err=e`), runs headless Chrome `--dump-dom` per hash (Chrome path from `$CHROME`, then `google-chrome`, `chromium`, the macOS app path; skip with a printed notice if none), and asserts on the dumped DOM: no `data-err`; `#a=clinica` count starts `2 de 5`; `#a=clinica,neuropsicologia` → `3 de 5` (any-of); `#cidade=lisboa` → `1 de 5` (accent-insensitive: also `#cidade=LISBOA`); `#d=desconhecido` → `1 de 5`; `#estado=todo` → `1 de 5`; `#rem=1` → `6 de 6`; `#nome=zzz` → `0 de 5`, empty tbody, pager buttons disabled; `#ord=nome&dir=desc` first row is the id whose Nome sorts last in `pt` collation (compute it from `tests/rows.txt` in the test and assert it); `#ord=cidade&dir=desc` puts e0002 and e0005 (missing Cidade) last, and same with `dir=asc`; `#p=999&a=bogus&ord=zzz` → `5 de 5`, no error; `#ord=morada` (not sortable) is ignored like an unknown key; with 5 visible rows the pager shows `página 1 de 1`; e0001 phone renders `href="tel:+351212345678"` with label `212 345 678`; e0004 label is `+44 20 7946 0958`; with `#rem=1` the `Café & Co` text decodes correctly.
 - [ ] **Step 2: Run tests; expected FAIL** (no `app.js`).
-- [ ] **Step 3: Implement `app.js` and `app.css`** per DESIGN §3 and §4. Raw rows are moved in and out of the tbody, never rebuilt from strings.
+- [ ] **Step 3: Implement `app.js` and `app.css`**: behaviour per DESIGN §3, visuals and markup copied from `docs/mockup/` (card layout, orange accent, emoji áreas, sort-pill bar; it supersedes DESIGN §4). Replace the mockup's demo script and fixture rows; strip the mockup-only `#vazio` hash demo. Raw rows are moved in and out of the tbody, never rebuilt from strings.
 - [ ] **Step 4: Run tests; expected PASS.**
 - [ ] **Step 5: Manual check** (record the result in the PR body): `python3 -m http.server` in the repo root, open `http://localhost:8000` on the real 6,345 rows at desktop width and at 390px; sort Nome both ways, filter `#cidade=porto`, toggle dark mode; confirm no console errors and first paint without a flash of the full table.
 - [ ] **Step 6: Verify contrast:** each colour pair in DESIGN §4 meets 4.5:1 in light and dark (any online or CLI contrast checker); adjust the token if one fails.

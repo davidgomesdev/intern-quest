@@ -16,7 +16,8 @@ scripts/check.py              row/file/diff validator (CI + local)
 scripts/test.py               runs every check in §7
 tests/opp-a.html  tests/opp-b.html   tiny OPP fixtures (3–4 rows each)
 .github/workflows/check.yml
-.claude/skills/fill-entity/SKILL.md  subagent skill (written later)
+.claude/skills/fill-entity/SKILL.md  subagent skill (one entity → one PR)
+.claude/skills/fill-batch/SKILL.md   orchestrator skill (ids → one subagent each)
 ```
 
 Why:

@@ -338,8 +338,8 @@ class Page:
         with open(self.path, "w", encoding="utf-8") as f:
             f.write("\n".join(lines))
 
-    def dump(self, h="", allow_err=False):
-        r = subprocess.run([self.chrome, "--headless", "--disable-gpu", "--no-sandbox", "--dump-dom",
+    def dump(self, h="", allow_err=False, wait=0):
+        r = subprocess.run([self.chrome, "--headless", "--disable-gpu", "--no-sandbox", "--dump-dom", f"--virtual-time-budget={wait}" if wait else "--no-first-run",
                             f"--user-data-dir={self.tmp}/profile", f"file://{self.path}#{h}"],
                            capture_output=True, text=True, timeout=60)
         assert r.returncode == 0, r.stderr
@@ -374,6 +374,13 @@ def test_page_requires_chrome():
         _chrome = real
         os.environ.pop("REQUIRE_CHROME") if old is None else os.environ.update(REQUIRE_CHROME=old)
     raise AssertionError("test_page skipped despite REQUIRE_CHROME")
+
+
+def test_head_sets_js_class_before_css():
+    with open(SHELL, encoding="utf-8") as f:
+        head = f.read().split("</head>")[0]
+    i, j = head.index("classList.add('js')"), head.index('<link rel="stylesheet"')
+    assert i < j and head.rindex("<script", 0, i) > head.index("<head>") and "setTimeout" in head[i:j]
 
 
 def test_page():
@@ -483,7 +490,7 @@ def test_page():
         with open(syntax, "w", encoding="utf-8") as f:
             f.write("this is not javascript(")
         for script in (runtime, syntax):
-            dom = Page(chrome, tmp, fixture, script=script).dump(allow_err=True)
+            dom = Page(chrome, tmp, fixture, script=script).dump(allow_err=True, wait=6000)
             assert not re.search(r'<html[^>]*class="[^"]*\bjs\b', dom), script
             assert len(_ids(dom)) == 6, script
 

@@ -48,13 +48,16 @@ Give only the id and the repo path. The subagent reads the name itself.
 When all subagents finish, print one table, then the counts:
 
 ```
-| id    | result                 |
-|-------|------------------------|
-| e0001 | https://github.com/…/pull/12 |
-| e0002 | FAILED: <reason>       |
-| e0003 | skipped: already ✅    |
-| e0005 | deferred: next batch   |
+| id    | nome                         | result                       |
+|-------|------------------------------|------------------------------|
+| e0001 | Centro Doutor João dos Santos | https://github.com/…/pull/12 |
+| e0002 | Clínica Exemplo, Lda.        | FAILED: <reason>             |
+| e0003 | Escola Exemplo               | skipped: already ✅          |
+| e0005 | Associação Exemplo           | deferred: next batch         |
+| e0009 | —                            | skipped: no row              |
 ```
+
+Nome is the third `<td>` of the row from step 2 (copy it exactly). Use `—` only when the id has no row.
 
 Then: `Remaining ⬜: ` + output of `grep -c '^<tr id="e[0-9]*"><td>⬜' index.html`.
 

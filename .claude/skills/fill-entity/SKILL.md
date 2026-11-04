@@ -110,14 +110,28 @@ List every page you took a value from. No co-author trailers. Never use `--no-ve
 
 ## 6b. Wait for CI, merge
 
-This skill overrides the global "never merge" rule: merge only after CI succeeds.
+This skill overrides the global "never merge" rule: merge only after CI succeeds with no warnings or alerts.
 
 ```bash
 sleep 20   # let checks register
 gh pr checks --watch --fail-fast
 ```
 
-- Exit 0 (all pass): `gh pr merge --squash` (no `--delete-branch`; the branch is checked out in the worktree). Then `git push origin --delete feat/eID-fill`.
+- Exit 0 (all pass): look for alerts before merging:
+
+  ```bash
+  SHA=$(git rev-parse HEAD)
+  # every check must be exactly "success" (neutral, skipped, etc. count as alerts)
+  gh api repos/{owner}/{repo}/commits/$SHA/check-runs --jq '.check_runs[] | select(.conclusion != "success") | .name'
+  # any warning/failure annotation on any check
+  for id in $(gh api repos/{owner}/{repo}/commits/$SHA/check-runs --jq '.check_runs[].id'); do
+    gh api repos/{owner}/{repo}/check-runs/$id/annotations --jq '.[] | select(.annotation_level != "notice") | "\(.annotation_level): \(.message)"'
+  done
+  # any review or comment on the PR
+  gh pr view --json comments,reviews --jq '(.comments | length) + (.reviews | length)'
+  ```
+
+  Any output from the first two, or a count above 0 from the third, is an alert: do not merge, report `FAILED: alert, not merged <PR URL>: <first alert>`. Otherwise `gh pr merge --squash` (no `--delete-branch`; the branch is checked out in the worktree). Then `git push origin --delete feat/eID-fill`.
 - Non-zero exit (a check failed): do not merge. Report `FAILED: CI failed <PR URL>`.
 - "no checks reported" after a second attempt 30s later: do not merge. Report `FAILED: no CI checks <PR URL>`.
 - Merge refused (conflict, branch protection): do not retry or bypass. Report `FAILED: merge refused: <reason>`.

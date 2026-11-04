@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Intern Quest · Estágios de Psicologia</title>
+<script>document.documentElement.classList.add('js')</script>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="pagina">
+<header class="topo">
+  <h1>Intern Quest <span class="marca" aria-hidden="true">✦</span></h1>
+  <p class="sub">Encontra onde fazer o teu Ano Profissional Júnior em Psicologia. Procura por cidade, distrito ou área de atuação.</p>
+  <p class="aviso" role="note"><span aria-hidden="true">💡</span> <strong>Antes de contactar:</strong> esta lista vem da Ordem dos Psicólogos e não quer dizer que haja vaga. As moradas e os contactos foram recolhidos automaticamente e podem ter erros, por isso confirma sempre no site da entidade. Fonte: <a href="https://www.ordemdospsicologos.pt/pt/estagios/entidades">lista de entidades da OPP</a>.</p>
+</header>
+<noscript><p class="semjs">Sem JavaScript vês todas as entidades, sem filtros nem ordenação. Usa a pesquisa do navegador (Ctrl+F).</p></noscript>
+
+<main>
+<details id="painel" open>
+<summary>Filtros <span id="ativos">(2 ativos)</span></summary>
+<form id="filters" role="search" aria-label="Filtrar entidades">
+  <div class="campos">
+    <label class="campo nome">Nome da entidade <input type="search" name="nome" autocomplete="off" placeholder="ex.: Santa Casa, clínica, agrupamento…"></label>
+    <label class="campo">Cidade <input type="search" name="cidade" list="cidades" autocomplete="off"></label>
+    <label class="campo">Só esta cidade <select name="c"><option value="">Todas</option><option>Braga</option><option>Cascais</option><option>Coimbra</option><option>Vila Nova de Gaia</option></select></label>
+    <label class="campo">Distrito <select name="d"><option value="">Todos</option><option>Aveiro</option><option>Lisboa</option><option>Porto</option><option value="desconhecido">Desconhecido</option></select></label>
+  </div>
+  <datalist id="cidades"><option value="Braga"><option value="Cascais"><option value="Coimbra"><option value="Vila Nova de Gaia"></datalist>
+  <fieldset>
+    <legend>Áreas de atuação</legend>
+    <div class="opcoes">
+      <label class="toggle"><input type="checkbox" name="a" value="clinica" checked><span><span aria-hidden="true">🩺</span> Clínica e da Saúde</span></label>
+      <label class="toggle"><input type="checkbox" name="a" value="neuropsicologia"><span><span aria-hidden="true">🧠</span> Neuropsicologia</span></label>
+      <label class="toggle"><input type="checkbox" name="a" value="psicoterapia"><span><span aria-hidden="true">💬</span> Psicoterapia</span></label>
+      <label class="toggle"><input type="checkbox" name="a" value="educacao"><span><span aria-hidden="true">🎓</span> Educação</span></label>
+      <label class="toggle"><input type="checkbox" name="a" value="organizacoes"><span><span aria-hidden="true">💼</span> Trabalho, Social e Organizações</span></label>
+      <label class="toggle"><input type="checkbox" name="a" value="justica"><span><span aria-hidden="true">⚖️</span> Justiça / Forense</span></label>
+      <label class="toggle"><input type="checkbox" name="a" value="comunitaria"><span><span aria-hidden="true">🤝</span> Comunitária / Intervenção Social</span></label>
+      <label class="toggle"><input type="checkbox" name="a" value="desporto"><span><span aria-hidden="true">🏅</span> Desporto</span></label>
+      <label class="toggle"><input type="checkbox" name="a" value="desconhecido"><span><span aria-hidden="true">❔</span> Desconhecido</span></label>
+    </div>
+  </fieldset>
+  <div class="grupo">
+    <fieldset class="campo">
+      <legend>Estado</legend>
+      <div class="seg">
+        <label class="toggle"><input type="radio" name="estado" value="todos" checked><span>Todas</span></label>
+        <label class="toggle"><input type="radio" name="estado" value="ok"><span>✅ Com dados</span></label>
+        <label class="toggle"><input type="radio" name="estado" value="todo"><span>⬜ Ainda sem dados</span></label>
+      </div>
+    </fieldset>
+    <label class="check"><input type="checkbox" name="rem" value="1" checked> Mostrar as que saíram da lista da OPP</label>
+    <button type="reset" class="limpar">Limpar filtros</button>
+  </div>
+</form>
+</details>
+
+<div class="barra">
+  <p id="count" aria-live="polite"><strong>1204</strong> de 6345 entidades, 802 com dados</p>
+  <nav class="pager" aria-label="Paginação">
+    <button type="button" data-p="prev" disabled>‹ Anterior</button>
+    <span>Página 1 de 13</span>
+    <button type="button" data-p="next">Seguinte ›</button>
+  </nav>
+</div>
+
+<div id="vazio" hidden>
+  <span class="grande" aria-hidden="true">🔍</span>
+  <p><strong>Nenhuma entidade com estes filtros.</strong> Experimenta tirar uma área ou procurar pelo distrito em vez da cidade.</p>
+  <button type="reset" form="filters">Limpar filtros</button>
+</div>
+
+<div class="tabela">
+<table role="table" aria-label="Entidades de estágio da OPP">
+<thead role="rowgroup"><tr role="row">
+<th role="columnheader" scope="col" data-k="estado"><button type="button">Estado</button></th>
+<th role="columnheader" scope="col" data-k="n" aria-sort="ascending"><button type="button">Nº</button></th>
+<th role="columnheader" scope="col" data-k="nome"><button type="button">Nome</button></th>
+<th role="columnheader" scope="col" data-k="cidade"><button type="button">Cidade</button></th>
+<th role="columnheader" scope="col" data-k="distrito"><button type="button">Distrito</button></th>
+<th role="columnheader" scope="col" data-k="morada"><button type="button">Morada</button></th>
+<th role="columnheader" scope="col" data-k="areas"><button type="button">Áreas</button></th>
+<th role="columnheader" scope="col" data-k="adicional"><button type="button">Adicional</button></th>
+<th role="columnheader" scope="col" data-k="web"><button type="button">Website</button></th>
+<th role="columnheader" scope="col" data-k="email"><button type="button">E-mail</button></th>
+<th role="columnheader" scope="col" data-k="tel"><button type="button">Telefone</button></th>
+</tr></thead>
+<tbody id="rows" class="ready" role="rowgroup">
+<tr id="e0003"><td>✅</td><td>0003</td><td>Clínica de Psicologia Horizonte, Lda.</td><td>Cascais</td><td>Lisboa</td><td>Avenida Marginal 412, 2.º Esq., 2750-428 Cascais</td><td>clinica psicoterapia</td><td>Consultas para crianças e adultos; supervisão semanal</td><td>https://www.clinicahorizonte.example</td><td>geral@clinicahorizonte.example</td><td>+351 214 000 312</td></tr>
+<tr id="e0007"><td>⬜</td><td>0007</td><td>Centro Social e Paroquial de São Vicente de Alfama</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr id="e0012"><td>✅</td><td>0012</td><td>Agrupamento de Escolas Rio Novo</td><td>Vila Nova de Gaia</td><td>Porto</td><td>Rua da Escola 15, 4400-100 Vila Nova de Gaia</td><td>educacao</td><td>Serviço de Psicologia e Orientação (SPO)</td><td>https://aerionovo.example</td><td>spo@aerionovo.example</td><td>+351 223 000 450</td></tr>
+<tr id="e0015"><td>✅</td><td>0015</td><td>Associação Passo a Passo</td><td>Braga</td><td><i>desconhecido</i></td><td><i>indisponível</i></td><td>comunitaria</td><td><i>indisponível</i></td><td><i>indisponível</i></td><td>passoapasso.braga@correio.example</td><td><i>indisponível</i></td></tr>
+<tr id="e0021"><td>✅</td><td>0021</td><td>Fundação Amélia Teixeira</td><td>Coimbra</td><td>Coimbra</td><td>Rua do Brasil 88, 3030-175 Coimbra</td><td><i>desconhecido</i></td><td><i>indisponível</i></td><td>https://fundacaoameliateixeira.example</td><td><i>indisponível</i></td><td>+351 239 000 118</td></tr>
+<tr id="e0024"><td>⬜</td><td>0024</td><td>Hospital Distrital de Montemor (Unidade de Psiquiatria)</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr id="e0030"><td>✅</td><td>0030</td><td>Centro de Reabilitação Psicossocial e Intervenção Comunitária da Associação de Pais e Amigos do Cidadão com Deficiência Mental de Setúbal (IPSS)</td><td>Setúbal</td><td>Setúbal</td><td>Estrada de Algeruz, Quinta do Vale, 2910-279 Setúbal</td><td>neuropsicologia comunitaria</td><td>Centro de Atividades e Capacitação para a Inclusão; acompanhamento a famílias</td><td>https://www.capacitar-setubal.example</td><td>psicologia@capacitar-setubal.example</td><td>+351 265 000 731</td></tr>
+<tr id="e0031"><td>✅</td><td>0031</td><td>Instituto Luso-Espanhol de Neurociências</td><td>Elvas</td><td>Portalegre</td><td>Rua de Olivença 3, 7350-092 Elvas</td><td>neuropsicologia</td><td>Também tem polo em Badajoz</td><td>https://ilen.example</td><td>info@ilen.example</td><td>+34 924 000 217</td></tr>
+<tr id="e0038" data-removed="1"><td>⬜</td><td>0038</td><td>Casa de Acolhimento Santa Clara</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr id="e0044"><td>✅</td><td>0044</td><td>Gabinete de Psicologia Desportiva Alto Rendimento</td><td>Maia</td><td>Porto</td><td>Rua do Estádio 210, 4470-001 Maia</td><td>desporto</td><td>Acompanha atletas de formação</td><td>https://altorendimento.example</td><td>contacto@altorendimento.example</td><td>+351 229 000 044</td></tr>
+<tr id="e0052"><td>⬜</td><td>0052</td><td>Santa Casa da Misericórdia de Vila Real</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr id="e0057"><td>✅</td><td>0057</td><td>Estabelecimento Prisional de Vale do Vouga</td><td>Aveiro</td><td>Aveiro</td><td>Rua das Salinas 5, 3810-200 Aveiro</td><td>justica</td><td><i>indisponível</i></td><td>https://www.epvalevouga.example</td><td><i>indisponível</i></td><td>+351 234 000 570</td></tr>
+<tr id="e0063"><td>✅</td><td>0063</td><td>Recursos &amp; Pessoas – Consultoria, S.A.</td><td>Lisboa</td><td>Lisboa</td><td>Avenida da Liberdade 190, 6.º, 1250-147 Lisboa</td><td>organizacoes</td><td>Recrutamento e avaliação de desempenho</td><td>https://recursosepessoas.example</td><td>estagios@recursosepessoas.example</td><td>+351 213 000 063</td></tr>
+<tr id="e0069"><td>⬜</td><td>0069</td><td>Cooperativa de Ensino Escola Nova do Algarve, CRL</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr id="e0074"><td>✅</td><td>0074</td><td>Unidade de Saúde Familiar Ria Formosa</td><td>Faro</td><td>Faro</td><td>Largo do Carmo 2, 8000-148 Faro</td><td>clinica</td><td>Psicologia nos cuidados de saúde primários</td><td>https://usfriaformosa.example</td><td>usf.riaformosa@saude.example</td><td>+351 289 000 074</td></tr>
+<tr id="e0080"><td>✅</td><td>0080</td><td>Associação Humanitária Laços</td><td><i>indisponível</i></td><td><i>desconhecido</i></td><td><i>indisponível</i></td><td><i>desconhecido</i></td><td><i>indisponível</i></td><td><i>indisponível</i></td><td><i>indisponível</i></td><td><i>indisponível</i></td></tr>
+<tr id="e0086"><td>⬜</td><td>0086</td><td>Centro Hospitalar do Baixo Tâmega</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr id="e0091"><td>✅</td><td>0091</td><td>Clínica Atlântico Saúde Mental</td><td>Funchal</td><td>Região Autónoma da Madeira</td><td>Rua da Carreira 77, 9000-042 Funchal</td><td>clinica neuropsicologia</td><td>Avaliação neuropsicológica de adultos</td><td>https://atlanticosm.example</td><td>clinica@atlanticosm.example</td><td>+351 291 000 091</td></tr>
+<tr id="e0097"><td>✅</td><td>0097</td><td>Casa do Povo de Rabo de Peixe</td><td>Ribeira Grande</td><td><i>desconhecido</i></td><td>Rua Direita 14, 9600-099 Rabo de Peixe</td><td>comunitaria</td><td>Projeto de intervenção comunitária com jovens</td><td><i>indisponível</i></td><td>casadopovo.rp@correio.example</td><td>+351 296 000 097</td></tr>
+<tr id="e0102"><td>⬜</td><td>0102</td><td>Município de Mirandela</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr id="e0108"><td>✅</td><td>0108</td><td>Escola Profissional de Viseu</td><td>Viseu</td><td>Viseu</td><td>Rua Formosa 41, 3500-135 Viseu</td><td>educacao comunitaria</td><td>Orientação vocacional</td><td>https://epviseu.example</td><td>secretaria@epviseu.example</td><td>+351 232 000 108</td></tr>
+<tr id="e0115"><td>⬜</td><td>0115</td><td>Instituto de Apoio à Criança e à Família do Norte</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr id="e0121"><td>✅</td><td>0121</td><td>Espaço Terapêutico Mente Aberta</td><td>Leiria</td><td>Leiria</td><td>Rua Barão de Viamonte 9, 1.º Dto., 2400-262 Leiria</td><td>psicoterapia</td><td>Psicoterapia de grupo</td><td>https://menteaberta.example</td><td>ola@menteaberta.example</td><td>+351 912 000 121</td></tr>
+<tr id="e0128"><td>✅</td><td>0128</td><td>Universidade Sénior de Évora</td><td>Évora</td><td>Évora</td><td>Rua da República 101, 7000-656 Évora</td><td>comunitaria</td><td>Estimulação cognitiva para seniores</td><td>https://useniorevora.example</td><td><i>indisponível</i></td><td>+351 266 000 128</td></tr>
+</tbody>
+</table>
+</div>
+
+<nav class="pager pager-fim" aria-label="Paginação, fim da lista">
+  <button type="button" data-p="prev" disabled>‹ Anterior</button>
+  <span>Página 1 de 13</span>
+  <button type="button" data-p="next">Seguinte ›</button>
+</nav>
+</main>
+
+<footer>
+  Lista de base: <a href="https://www.ordemdospsicologos.pt/pt/estagios/entidades">ordemdospsicologos.pt</a>, atualizada a 4 de novembro de 2026. Moradas, áreas e contactos são acrescentados aos poucos, uma entidade de cada vez.
+</footer>
+</div>
+
+<!-- MOCKUP ONLY. enhance() below produces the exact DOM app.js must produce; the rest only toggles visual state. -->
+<script>
+(function () {
+  var L = {clinica:['🩺','Clínica e da Saúde'], neuropsicologia:['🧠','Neuropsicologia'], psicoterapia:['💬','Psicoterapia'], educacao:['🎓','Educação'],
+    organizacoes:['💼','Trabalho, Social e Organizações'], justica:['⚖️','Justiça / Forense'], comunitaria:['🤝','Comunitária / Intervenção Social'], desporto:['🏅','Desporto']};
+  var NEW = '<span class="vh"> (abre noutra janela)</span>';
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; }
+  function link(href, label, ext) {
+    var a = el('a'); a.href = href;
+    label.split(/(?<=@)|(?=\.)/).forEach(function (p, i) { if (i) a.append(el('wbr')); a.append(p); });
+    if (ext) { a.target = '_blank'; a.rel = 'noopener'; a.insertAdjacentHTML('beforeend', NEW); }
+    return a;
+  }
+  function area(k) { var s = el('span', 'area'), i = el('span', '', L[k][0]); i.setAttribute('aria-hidden', 'true'); s.append(i, L[k][1]); return s; }
+  function enhance(tr) {
+    var c = tr.cells, has = function (td) { return td.textContent && !td.querySelector('i'); };
+    tr.setAttribute('role', 'row'); Array.prototype.forEach.call(c, function (td) { td.setAttribute('role', 'cell'); });
+    var ok = c[0].textContent === '✅', s = el('span', ok ? 'st' : 'st st-todo', c[0].textContent);
+    s.setAttribute('role', 'img'); s.setAttribute('aria-label', ok ? 'Preenchido' : 'Por preencher'); s.title = s.getAttribute('aria-label');
+    c[0].replaceChildren(s);
+    if (has(c[6])) { var w = el('span', 'areas'); c[6].textContent.split(' ').forEach(function (k) { w.append(area(k)); }); c[6].replaceChildren(w); }
+    if (has(c[8])) { var u = new URL(c[8].textContent); c[8].replaceChildren(link(u.href, u.hostname.replace(/^www\./, ''), true)); }
+    if (has(c[9])) c[9].replaceChildren(link('mailto:' + c[9].textContent, c[9].textContent));
+    if (has(c[10])) { var t = c[10].textContent; c[10].replaceChildren(link('tel:' + t.replace(/ /g, ''), t.replace(/^\+351 /, ''))); }
+    if (tr.dataset.removed) c[2].append(' ', el('span', 'removida', 'saiu da lista da OPP'));
+  }
+  Array.prototype.forEach.call(document.getElementById('rows').rows, enhance);
+
+  var ths = document.querySelectorAll('thead th');
+  ths.forEach(function (th) {
+    th.querySelector('button').addEventListener('click', function () {
+      var dir = th.getAttribute('aria-sort') === 'ascending' ? 'descending' : 'ascending';
+      ths.forEach(function (o) { o.removeAttribute('aria-sort'); }); th.setAttribute('aria-sort', dir);
+    });
+  });
+
+  var f = document.getElementById('filters');
+  function active() {
+    var n = 0;
+    ['nome', 'cidade', 'c', 'd'].forEach(function (k) { if (f.elements[k].value) n++; });
+    n += f.querySelectorAll('[name=a]:checked').length;
+    if (f.elements.estado.value !== 'todos') n++; if (f.elements.rem.checked) n++;
+    document.getElementById('ativos').textContent = n ? '(' + n + (n > 1 ? ' ativos)' : ' ativo)') : '';
+  }
+  f.addEventListener('input', active); f.addEventListener('reset', function () { setTimeout(active); });
+  active();
+  if (matchMedia('(max-width: 719px)').matches) document.getElementById('painel').open = false;
+
+  if (location.hash === '#vazio') {
+    document.querySelector('.tabela').hidden = true; document.getElementById('vazio').hidden = false;
+    document.getElementById('count').innerHTML = '<strong>0</strong> de 6345 entidades';
+    document.querySelectorAll('.pager').forEach(function (p) { p.hidden = true; });
+  }
+})();
+</script>
+</body>
+</html>

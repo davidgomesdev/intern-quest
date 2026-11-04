@@ -80,7 +80,7 @@ Functions (one line each):
   - `kNome.includes(norm(S.nome))`
   - `kCidade.includes(norm(S.cidade))` (text box) and `cidade === S.c` (dropdown)
   - `distrito === S.d` (`S.d === 'desconhecido'` matches null)
-  - áreas: `S.modo === 'all' ? every : some` over `S.a`
+  - áreas: `S.a.some(a => r.areas.includes(a))` (any-of only)
   - status `ok`/`todo`
   - `S.rem || !removed`
 - `sortRows(list)` sorts a copy by `S.ord`/`S.dir`. Nº is compared numerically. Text uses `COLL = new Intl.Collator('pt', {sensitivity:'base', numeric:true})`. Áreas sort by their first label. Nulls and empty values sort **last in both directions**.
@@ -102,7 +102,6 @@ State `S` and its hash keys (short Portuguese words, shareable):
 | `c` | Cidade exact (dropdown) | `''` |
 | `d` | Distrito exact, or `desconhecido` | `''` |
 | `a` | áreas, comma-separated slugs | `''` |
-| `modo` | `any` / `all` | `any` |
 | `estado` | `todos` / `ok` / `todo` | `todos` |
 | `rem` | `1` = show rows removed from OPP | off |
 | `ord`, `dir` | sort column key, `asc`/`desc` | `n`, `asc` |
@@ -145,7 +144,7 @@ All text/background pairs meet WCAG AA (4.5:1). The implementation step must ver
 
 **Filter bar** is a `<form id="filters">` inside `<details open>`. JS removes `open` on narrow screens at init. Contents:
 - Row 1: Nome · Cidade text box with `list="cidades"` · Cidade `<select>` "Todas as cidades" · Distrito `<select>` · Estado `<select>` · "Limpar" button.
-- Row 2: a `<fieldset><legend>Áreas</legend>` of 9 checkbox chips (real `<input type=checkbox>` + label, styled as pills, accent fill when checked), the radio pair "qualquer / todas", and the checkbox "mostrar removidas".
+- Row 2: a `<fieldset><legend>Áreas</legend>` of 9 checkbox chips (real `<input type=checkbox>` + label, styled as pills, accent fill when checked), and the checkbox "mostrar removidas".
 - The `<summary>` shows "Filtros (n ativos)".
 
 Two Cidade controls are kept because Firefox for Android does not support `<datalist>` (caniuse). There the text box degrades to plain "contains" search and the `<select>` remains the exact-match picker.
@@ -179,7 +178,7 @@ Desktop wireframe:
 | Nome [__________]  Cidade [gaia_____]  [Todas as cidades v]  Distrito [Porto  v] |
 | Estado [Todos v]                                                     [ Limpar ]  |
 | Áreas (Clínica)(Neuropsicologia)(Psicoterapia)[Educação](Organizações)(Justiça)  |
-|       (Comunitária)(Desporto)(Desconhecido)   ( ) qualquer (o) todas  [ ] removidas|
+|       (Comunitária)(Desporto)(Desconhecido)   [ ] removidas|
 +----------------------------------------------------------------------------------+
 | 312 de 6345 · 1204 preenchidas               [ Anterior ] página 2 de 4 [Seguinte]|
 +----+------+--------------------+---------+--------+-------------+---------------+--

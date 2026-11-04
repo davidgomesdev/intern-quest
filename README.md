@@ -28,7 +28,7 @@ The full format and validation rules are in [SPEC.md](SPEC.md) section 5. `scrip
 2. Research it and replace only that line.
 3. One entity per PR, on branch `feat/e0001-fill`.
 
-CI rejects a PR that touches anything else. The `fill-entity` skill that packages these steps is not written yet.
+CI checks that an entity PR changes exactly one row of `index.html` (same id and name, now filled) and nothing else. A sync PR may only add empty rows or flag rows as removed. A PR that changes no row passes. The `fill-entity` skill that packages these steps is not written yet.
 
 ## Checks
 

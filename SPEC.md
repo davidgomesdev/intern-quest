@@ -12,13 +12,13 @@ Help a psychology graduate find an internship (Ano Profissional Júnior) **in or
 - **6,345 entities** (not 7,498: 7,498 is the highest protocol number; gaps are protocols not currently listed).
 - 6,345 unique protocol numbers, 6,342 unique names (3 repeated names). The protocol number is the primary key, never the name.
 - The OPP list is informational only and does not mean an open vacancy. The site must say so (see 6.5).
-- Seed extraction already done: `entities.json` (scratchpad). The build step re-generates the seed from the source page.
+- The initial table is generated from the source page by `scripts/sync` run on an empty `index.html` (no separate seed script).
 
 ## 3. Deliverable
 
 A single static page `index.html`, hosted on GitHub Pages, containing every entity. No backend, no framework, no build step at view time. Vanilla JS and CSS, inline or in two sibling files.
 
-Repo contents (small on purpose): `index.html`, `README.md`, `SPEC.md`, the subagent skill, and the seed script.
+Repo contents (small on purpose): `index.html`, its CSS and JS files, `README.md`, `SPEC.md`, the subagent skill, `scripts/sync` (also seeds an empty table), `scripts/check` (PR validation), `scripts/test`, and the CI workflow under `.github/workflows/`. Exact layout is set in the design doc.
 
 ## 4. Data model (one entity)
 
@@ -34,7 +34,7 @@ Repo contents (small on purpose): `index.html`, `README.md`, `SPEC.md`, the suba
 | 8 | Adicional | text | Free text: anything the entity says that the fixed list does not capture |
 | 9 | Website | URL | Best effort |
 | 10 | E-mail | text | Public contact e-mail |
-| 11 | Telefone | text | As published, digits and spaces only |
+| 11 | Telefone | text | International format `+<country code> <digits>`, spaces allowed (e.g. `+351 212 345 678`). Rendered as a `tel:` link; the label drops a leading `+351 ` (see section 5) |
 
 ### 4.1 Fixed list of áreas de atuação **[CALL: list is my proposal]**
 
@@ -83,11 +83,12 @@ Filled example:
 Rules:
 - Eleven `<td>` per row, fixed order as in section 4. Always in the same shape, so a regex or `sed` can replace the whole line.
 - Lines are sorted by protocol number and never reordered.
-- Text is HTML-escaped (`&amp;`, `&lt;`). Emails and URLs stored as plain text; JS makes them links at render time.
+- Text is HTML-escaped (`&amp;`, `&lt;`). Emails and URLs stored as plain text; JS makes them links at render time. Telefone becomes `<a href="tel:+351212345678">212 345 678</a>`: the `href` is the stored number without spaces, the label drops a leading `+351 ` (non-Portuguese numbers show in full).
+- Ids are the protocol number zero-padded to **at least** 4 digits (`e0001`, `e9999`, `e10000`); never truncated. Row regex uses `e[0-9]{4,}`.
 - Áreas cell: space-separated slugs (not `;`). The UI turns them into chips and a multi-select filter, so the raw token form is never what the user sees **[CALL]**. Chosen because it is the cheapest form to edit and to match with `grep -w`.
 - Subagent read: `grep '^<tr id="e0001">' index.html`.
 - Subagent write: replace that one line; touch no other line.
-- Orchestrator: `grep -m1 '<td>⬜</td>' index.html` (next work), `grep -c '<td>⬜</td>' index.html` (remaining).
+- Orchestrator: `grep -m1 '^<tr id="e[0-9]*"><td>⬜' index.html` (next work), `grep -c '^<tr id="e[0-9]*"><td>⬜' index.html` (remaining). Rows flagged `data-removed="1"` have an attribute after the id, so these patterns skip them.
 
 ## 6. The page
 
@@ -119,7 +120,7 @@ Real `<table>` with `<th scope="col">`, keyboard-operable sort, labels on all fi
 ## 7. Workflow
 
 ### 7.1 Orchestrator (a Claude session, not part of the site)
-1. `grep -m1 '<td>⬜</td>' index.html` → pick the next entity (or N entities for N parallel subagents).
+1. `grep -m1 '^<tr id="e[0-9]*"><td>⬜' index.html` → pick the next entity (or N entities for N parallel subagents).
 2. Spawn one subagent per entity, giving it only the protocol number.
 3. Subagent opens one PR. The orchestrator never edits `index.html` itself.
 4. A human reviews and merges. Nothing is merged automatically.
@@ -139,7 +140,7 @@ A small script that fails the PR if:
 - more than one line of `index.html` changed, or any line other than the entity's changed;
 - the line does not match the section 5 shape (11 cells, valid status, valid áreas slugs, or exactly `<i>desconhecido</i>` alone);
 - a ✅ row contains an empty cell;
-- a URL does not start with `http://` or `https://`, or an e-mail is not shaped like one.
+- a URL does not start with `http://` or `https://`, an e-mail is not shaped like one, or a phone does not match `+<country code> <digits>`.
 
 ### 7.5 Syncing new entities from OPP **[CALL]**
 
@@ -158,7 +159,7 @@ Command: `scripts/sync` (Python stdlib, no deps). The orchestrator runs it, then
 
 ## 8. Quality
 
-- The seed script is deterministic: running it twice yields byte-identical output.
+- `scripts/sync` is deterministic: running it twice yields byte-identical output.
 - Seed check: 6,345 rows, ids unique, all start `⬜`.
 - Sync check: against a fixture, one new id is inserted in sorted position, one removed id is flagged not deleted, a second run is a no-op.
 - Page check: opens with no console errors; sorting and filtering produce the expected counts on a small fixture.

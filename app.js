@@ -1,4 +1,5 @@
 'use strict';
+document.documentElement.classList.add('js'); // CSS hides the raw rows only while this script is running
 // Intern Quest: filter, sort and page the raw <tr> lines of index.html. State lives in the URL hash.
 const PAGE = 50;
 const AREAS = { // slug -> [emoji, label]; one place for both
@@ -95,9 +96,16 @@ function el(tag, cls, text = '') {
 }
 function link(href, label, external) {
   const a = el('a'); a.href = href;
-  label.split(/(?<=@)|(?=\.)/).forEach((part, i) => { if (i) a.append(el('wbr')); a.append(part); });
+  label.replace('@', '@\n').split(/\n|(?=\.)/).forEach((part, i) => { if (i) a.append(el('wbr')); a.append(part); });
   if (external) { a.target = '_blank'; a.rel = 'noopener'; a.append(el('span', 'vh', ' (abre noutra janela)')); }
   return a;
+}
+
+function site(td) {
+  try {
+    const u = new URL(td.textContent);
+    if (/^https?:$/.test(u.protocol)) td.replaceChildren(link(u.href, u.hostname.replace(/^www\./, ''), true));
+  } catch { /* not a usable URL: leave the text as it is */ }
 }
 
 function enhance(r) {
@@ -115,7 +123,7 @@ function enhance(r) {
     }
     c[6].replaceChildren(w);
   }
-  if (has(c[8])) { const u = new URL(c[8].textContent); c[8].replaceChildren(link(u.href, u.hostname.replace(/^www\./, ''), true)); }
+  if (has(c[8])) site(c[8]);
   if (has(c[9])) c[9].replaceChildren(link('mailto:' + c[9].textContent, c[9].textContent));
   if (has(c[10])) { const t = c[10].textContent; c[10].replaceChildren(link('tel:' + t.replace(/ /g, ''), t.replace(/^\+351 /, ''))); }
   if (r.removed) c[2].append(' ', el('span', 'removida', 'removida da OPP'));
@@ -173,8 +181,13 @@ document.addEventListener('click', e => {
 });
 window.addEventListener('hashchange', () => { readState(); update(); });
 
-parse();
-buildOptions();
-if (matchMedia('(max-width: 719px)').matches) $('#painel').open = false;
-readState();
-update();
+try {
+  parse();
+  buildOptions();
+  if (matchMedia('(max-width: 719px)').matches) $('#painel').open = false;
+  readState();
+  update();
+} catch (e) {
+  document.documentElement.classList.remove('js'); // show the plain table rather than a blank page
+  throw e;
+}

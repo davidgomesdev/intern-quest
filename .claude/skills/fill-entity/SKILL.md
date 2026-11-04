@@ -114,4 +114,4 @@ List every page you took a value from. No co-author trailers. Never use `--no-ve
 cd "$(git rev-parse --git-common-dir)/.." && git worktree remove ../intern-quest-eID
 ```
 
-Final message, one line: `eID <PR URL>`, or `eID FAILED: <reason>`.
+Final message, one line, always with the Nome as read in step 2: `eID | NOME | <PR URL>`, or `eID | NOME | FAILED: <reason>`. If step 2 found no row, use `—` for NOME.

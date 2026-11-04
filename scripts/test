@@ -152,6 +152,114 @@ def test_check_diff():
     assert cd(diff(extra=[("<p>a</p>", "<p>b</p>")]), ["index.html", "app.js"], None) == []
 
 
+SHELL = os.path.join(os.path.dirname(HERE), "index.html")
+FIX = os.path.join(os.path.dirname(HERE), "tests")
+
+
+def _shell_lines():
+    with open(SHELL, encoding="utf-8") as f:
+        return f.read().split("\n")
+
+
+def _opp(name):
+    with open(os.path.join(FIX, name), encoding="utf-8") as f:
+        return sync.parse_opp(f.read())
+
+
+def _rows(lines):
+    return [l for l in lines if l.startswith('<tr id="e')]
+
+
+def _sync(lines, opp):
+    return sync.sync_lines(lines, opp, min_rows=1)
+
+
+def test_sync_seed():
+    shell = _shell_lines()
+    assert _rows(shell) == []
+    opp = _opp("opp-a.html")
+    assert opp[9] == 'Escola A & B <Lda> "Café"'
+    out, rep = _sync(shell, opp)
+    rows = _rows(out)
+    assert len(rows) == 3 and rep["new"] == [1, 4, 9] and rep["last_before"] is None and rep["last_after"] == 9
+    for r in rows:
+        assert r.count("<td>") == 11 and "⬜" in r and check.check_row(r) == [], r
+    assert rows[2] == sync.row_line(9, 'Escola A & B <Lda> "Café"')
+    assert "Escola A &amp; B &lt;Lda&gt; \"Café\"" in rows[2]
+    assert [l for l in out if not l.startswith("<tr")] == shell
+    out2, rep2 = _sync(out, opp)
+    assert out2 == out and not (rep2["new"] or rep2["removed"] or rep2["readded"] or rep2["renamed"])
+
+
+def test_sync_update():
+    a, b = _opp("opp-a.html"), _opp("opp-b.html")
+    seeded, _ = _sync(_shell_lines(), a)
+    out, rep = _sync(seeded, b)
+    ids = [int(l[9:l.index('"', 9)]) for l in _rows(out)]
+    assert ids == [1, 2, 4, 9, 12, 13], ids
+    assert rep["new"] == [2, 12, 13] and rep["removed"] == [4] and rep["readded"] == []
+    assert rep["renamed"] == [(1, "Centro Alfa", "Centro Alfa, Lda.")]
+    assert rep["last_before"] == 9 and rep["last_after"] == 13
+    by = {int(l[9:l.index('"', 9)]): l for l in _rows(out)}
+    assert by[4].startswith('<tr id="e0004" data-removed="1">') and check.check_row(by[4]) == []
+    assert by[1] in seeded and "Centro Alfa</td>" in by[1]
+    assert "Santa Casa X" in by[12] and "Santa Casa X" in by[13]
+    for l in by.values():
+        assert check.check_row(l) == [], l
+    out2, rep2 = _sync(out, b)
+    assert out2 == out and rep2["removed"] == [] and rep2["new"] == []
+
+
+def test_sync_readd():
+    a, b = _opp("opp-a.html"), _opp("opp-b.html")
+    seeded, _ = _sync(_shell_lines(), a)
+    gone, _ = _sync(seeded, b)
+    back, rep = _sync(gone, a)
+    assert rep["readded"] == [4] and rep["removed"] == [2, 12, 13]
+    row4 = [l for l in back if l.startswith('<tr id="e0004"')][0]
+    assert "data-removed" not in row4
+    assert [l for l in back if l.startswith('<tr id="e0002"')][0].startswith('<tr id="e0002" data-removed="1">')
+
+
+def test_sync_abort():
+    import subprocess, tempfile
+    seeded, _ = _sync(_shell_lines(), _opp("opp-a.html"))
+    try:
+        sync.sync_lines(seeded, {}, min_rows=1)
+        assert False, "expected ValueError"
+    except ValueError:
+        pass
+    with tempfile.TemporaryDirectory() as d:
+        f = os.path.join(d, "index.html")
+        with open(f, "w", encoding="utf-8") as fh:
+            fh.write("\n".join(seeded))
+        before = open(f, "rb").read()
+        empty = os.path.join(d, "empty.html")
+        with open(empty, "w") as fh:
+            fh.write("<html><body></body></html>")
+        r = subprocess.run([sys.executable, os.path.join(HERE, "sync"), "--from", empty, "--file", f, "--min-rows", "1"],
+                           capture_output=True, text=True)
+        assert r.returncode == 1, r
+        assert open(f, "rb").read() == before
+        # CLI happy path: writes, then no-op
+        a = os.path.join(FIX, "opp-b.html")
+        cmd = [sys.executable, os.path.join(HERE, "sync"), "--from", a, "--file", f, "--min-rows", "1"]
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        assert r.returncode == 0 and "+3 new" in r.stdout and "-1 removed" in r.stdout and "~1 renamed" in r.stdout, r.stdout
+        mid = open(f, "rb").read()
+        assert mid != before
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        assert r.returncode == 0 and "+0 new" in r.stdout and open(f, "rb").read() == mid
+
+
+def test_sync_wide_id():
+    out, rep = _sync(_shell_lines(), {9999: "Nove", 10000: "Dez mil"})
+    rows = _rows(out)
+    assert 'id="e9999"' in rows[0] and 'id="e10000"' in rows[1]
+    assert all(check.check_row(r) == [] for r in rows)
+    assert _sync(out, {9999: "Nove", 10000: "Dez mil"})[0] == out
+
+
 def main():
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
     for name, fn in tests:

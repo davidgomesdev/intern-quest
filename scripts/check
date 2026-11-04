@@ -67,7 +67,7 @@ def check_file(path):
     with open(path, encoding='utf-8') as f:
         for n, line in enumerate(f, 1):
             line = line.rstrip('\n')
-            if '<tr' not in line:
+            if not line.lstrip().startswith('<tr'):
                 continue
             errs += [f'line {n}: {e}' for e in check_row(line)]
             m = re.search(r'<tr id="e(\d+)"', line)

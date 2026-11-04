@@ -8,8 +8,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
-      - run: scripts/check index.html
+      - run: scripts/check.py index.html
       - if: github.event_name == 'pull_request'
         env: { BASE: "${{ github.base_ref }}", HEAD: "${{ github.head_ref }}" }
-        run: scripts/check --diff "origin/$BASE" --branch "$HEAD"
-      - run: scripts/test
+        run: scripts/check.py --diff "origin/$BASE" --branch "$HEAD"
+      - run: scripts/test.py

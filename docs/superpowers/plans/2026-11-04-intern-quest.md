@@ -6,7 +6,7 @@
 
 **Architecture:** `index.html` holds one `<tr>` line per entity. `app.js` reads those rows once and shows 100 at a time with filters, sort and URL-hash state. Three stdlib-Python scripts (`sync`, `check`, `test`) generate, validate and test the data file.
 
-**Tech Stack:** Python 3 stdlib (extensionless scripts), vanilla HTML/CSS/JS, GitHub Actions, headless Chrome for the page test.
+**Tech Stack:** Python 3 stdlib (`.py` scripts), vanilla HTML/CSS/JS, GitHub Actions, headless Chrome for the page test.
 
 **Spec:** `SPEC.md` (authoritative) and `docs/DESIGN.md` (approved; names, wireframes and script behaviour). Where this plan restates a value, it is copied from them. Where `docs/DESIGN.md` disagrees with `SPEC.md`, the spec wins; see "Overrides" below.
 
@@ -40,29 +40,29 @@
 
 ---
 
-### Task 1: `scripts/check` row and file validation
+### Task 1: `scripts/check.py` row and file validation
 
 **Files:**
-- Create: `scripts/check` (executable, `#!/usr/bin/env python3`), `scripts/test` (executable)
+- Create: `scripts/check.py` (executable, `#!/usr/bin/env python3`), `scripts/test.py` (executable)
 
 **Interfaces:**
-- Produces in `check`: `check_row(line: str) -> list[str]` (empty list = valid; messages name the failing cell); `check_file(path: str) -> list[str]` (every line containing `<tr` must pass `check_row`; ids strictly ascending); CLI `scripts/check FILE` prints errors and the ⬜/✅ counts, exit 1 on any error.
-- Produces in `test`: a runner that loads `check` and `sync` with `importlib.machinery.SourceFileLoader` (no `.py` extension), runs all test functions named `test_*`, exits non-zero on the first failure.
+- Produces in `check`: `check_row(line: str) -> list[str]` (empty list = valid; messages name the failing cell); `check_file(path: str) -> list[str]` (every line containing `<tr` must pass `check_row`; ids strictly ascending); CLI `scripts/check.py FILE` prints errors and the ⬜/✅ counts, exit 1 on any error.
+- Produces in `test`: a runner that loads `check` and `sync` with `importlib.machinery.SourceFileLoader`, runs all test functions named `test_*`, exits non-zero on the first failure.
 
-- [ ] **Step 1: Write failing tests in `scripts/test`**: `test_check_row_accepts` asserts `check_row` returns `[]` for: the ⬜ empty-row example from SPEC §5; the ✅ filled example from SPEC §5 with a `+351 212 345 678` phone; a ✅ row with every cell `<i>indisponível</i>` except Áreas and Distrito as `<i>desconhecido</i>`; a name containing `&amp;`; id `e10000`. `test_check_row_rejects` asserts non-empty for one bad line per rule: 10 cells; 12 cells; unknown status emoji; Nº not matching id; ✅ row with an empty cell; ⬜ row with a non-empty Cidade; unknown slug; duplicate slug; `<i>desconhecido</i>` together with a slug; `<i>desconhecido</i>` in Cidade; website `ftp://x`; e-mail `a@b`; phone `212345678` (no `+`); raw `&` or `<` in Nome; leading space before `<tr`.
-- [ ] **Step 2: Run `python3 scripts/test`; expected FAIL** (`check` missing).
-- [ ] **Step 3: Implement `check_row` and `check_file`** in `scripts/check` using the regexes and per-cell table of DESIGN §5.2, with the Overrides applied. `IND`/`DESC` allowed only on ✅ rows in the columns the table lists.
-- [ ] **Step 4: Run `python3 scripts/test`; expected PASS.**
+- [ ] **Step 1: Write failing tests in `scripts/test.py`**: `test_check_row_accepts` asserts `check_row` returns `[]` for: the ⬜ empty-row example from SPEC §5; the ✅ filled example from SPEC §5 with a `+351 212 345 678` phone; a ✅ row with every cell `<i>indisponível</i>` except Áreas and Distrito as `<i>desconhecido</i>`; a name containing `&amp;`; id `e10000`. `test_check_row_rejects` asserts non-empty for one bad line per rule: 10 cells; 12 cells; unknown status emoji; Nº not matching id; ✅ row with an empty cell; ⬜ row with a non-empty Cidade; unknown slug; duplicate slug; `<i>desconhecido</i>` together with a slug; `<i>desconhecido</i>` in Cidade; website `ftp://x`; e-mail `a@b`; phone `212345678` (no `+`); raw `&` or `<` in Nome; leading space before `<tr`.
+- [ ] **Step 2: Run `python3 scripts/test.py`; expected FAIL** (`check` missing).
+- [ ] **Step 3: Implement `check_row` and `check_file`** in `scripts/check.py` using the regexes and per-cell table of DESIGN §5.2, with the Overrides applied. `IND`/`DESC` allowed only on ✅ rows in the columns the table lists.
+- [ ] **Step 4: Run `python3 scripts/test.py`; expected PASS.**
 - [ ] **Step 5: Commit** `feat: add row and file validator`.
 
-### Task 2: `scripts/check --diff`
+### Task 2: `scripts/check.py --diff`
 
 **Files:**
-- Modify: `scripts/check`, `scripts/test`
+- Modify: `scripts/check.py`, `scripts/test.py`
 
 **Interfaces:**
 - Consumes: `check_row`.
-- Produces: `check_diff(diff_text: str, changed_files: list[str], branch: str | None) -> list[str]` (pure: takes the `--unified=0` diff of `index.html` and the `--name-only` list) implementing DESIGN §5.2 "Diff checks" (no row change = pass; entity mode; sync mode; else fail naming the line); CLI `scripts/check --diff BASE_REF [--branch NAME]` runs the two git commands against `BASE_REF...HEAD` and calls it, exit 1 on errors. Branch id regex `e(\d{4,})` must equal the row id when present in the branch name.
+- Produces: `check_diff(diff_text: str, changed_files: list[str], branch: str | None) -> list[str]` (pure: takes the `--unified=0` diff of `index.html` and the `--name-only` list) implementing DESIGN §5.2 "Diff checks" (no row change = pass; entity mode; sync mode; else fail naming the line); CLI `scripts/check.py --diff BASE_REF [--branch NAME]` runs the two git commands against `BASE_REF...HEAD` and calls it, exit 1 on errors. Branch id regex `e(\d{4,})` must equal the row id when present in the branch name.
 
 - [ ] **Step 1: Write failing test `test_check_diff`** that feeds `check_diff` hand-written diff strings (no git repo, no commits) for a 3-row `index.html` and asserts: fill of one row → `[]`; fill of one row with branch `feat/e0002-fill` and row `e0001` → error; two rows filled → error; Nome changed → error; filled row with `data-removed` added → error; a non-row line of `index.html` changed together with a fill → error; another file changed together with a fill → error; sync-mode: a new valid ⬜ row inserted → `[]`; `data-removed="1"` added to an existing row with no other change → `[]`; a new ✅ row inserted → error; only `app.js` changed → `[]`.
 - [ ] **Step 2: Run tests; expected FAIL.**
@@ -70,14 +70,14 @@
 - [ ] **Step 4: Run tests; expected PASS.**
 - [ ] **Step 5: Commit** `feat: validate entity and sync diffs`.
 
-### Task 3: `scripts/sync` and the empty shell
+### Task 3: `scripts/sync.py` and the empty shell
 
 **Files:**
-- Create: `scripts/sync`, `index.html` (shell with empty `<tbody id="rows">`, header, disclaimer, `<form id="filters">`, count, pager, 11-column `<thead>`, footer; markup per DESIGN §2 and §4 "Filter bar"; links `app.css`/`app.js`), `.nojekyll` (empty), `tests/opp-a.html`, `tests/opp-b.html`
-- Modify: `scripts/test`
+- Create: `scripts/sync.py`, `index.html` (shell with empty `<tbody id="rows">`, header, disclaimer, `<form id="filters">`, count, pager, 11-column `<thead>`, footer; markup per DESIGN §2 and §4 "Filter bar"; links `app.css`/`app.js`), `.nojekyll` (empty), `tests/opp-a.html`, `tests/opp-b.html`
+- Modify: `scripts/test.py`
 
 **Interfaces:**
-- Produces: `parse_opp(html_text: str) -> dict[int, str]` (from `table.mainlisting`, whitespace-normalised, HTML-unescaped names); `row_line(n: int, name: str) -> str` (⬜ row, name escaped with `html.escape(name, quote=False)`); `sync_lines(lines: list[str], opp: dict[int, str], min_rows: int = 1000) -> tuple[list[str], dict]` where the dict has keys `new`, `removed`, `readded`, `renamed` (lists of ids / `(id, old, new)`), `last_before`, `last_after`; raises `ValueError` if `len(opp) < min_rows`. CLI `scripts/sync [--from FILE] [--file index.html] [--min-rows N]` prints the report of DESIGN §5.1, writes only if bytes changed, exit 1 on abort.
+- Produces: `parse_opp(html_text: str) -> dict[int, str]` (from `table.mainlisting`, whitespace-normalised, HTML-unescaped names); `row_line(n: int, name: str) -> str` (⬜ row, name escaped with `html.escape(name, quote=False)`); `sync_lines(lines: list[str], opp: dict[int, str], min_rows: int = 1000) -> tuple[list[str], dict]` where the dict has keys `new`, `removed`, `readded`, `renamed` (lists of ids / `(id, old, new)`), `last_before`, `last_after`; raises `ValueError` if `len(opp) < min_rows`. CLI `scripts/sync.py [--from FILE] [--file index.html] [--min-rows N]` prints the report of DESIGN §5.1, writes only if bytes changed, exit 1 on abort.
 - Consumes: `check_row` (tests only).
 
 - [ ] **Step 1: Create the fixtures.** `opp-a.html`: 3 rows (ids 1, 4, 9) in the real `mainlisting` markup, one name `Escola A & B <Lda> "Café"` (escaped as the real site does). `opp-b.html`: id 1 renamed, id 4 absent, new ids 2 (below the max) and 12, and two rows with the identical name.
@@ -92,9 +92,9 @@
 **Files:**
 - Modify: `index.html`
 
-- [ ] **Step 1: Run `scripts/sync`** (network). Expected: report `+6345 new`, exit 0.
-- [ ] **Step 2: Verify:** `scripts/check index.html` exits 0 reporting 6345 ⬜ / 0 ✅; `scripts/sync` again prints `no changes`; `grep -c '^<tr id="e' index.html` prints 6345; `grep -o '<tr id="e[0-9]*"' index.html | tail -1` ends with `e7498`.
-- [ ] **Step 3: Verify the diff check accepts it:** commit, then `scripts/check --diff main` exits 0 (sync mode).
+- [ ] **Step 1: Run `scripts/sync.py`** (network). Expected: report `+6345 new`, exit 0.
+- [ ] **Step 2: Verify:** `scripts/check.py index.html` exits 0 reporting 6345 ⬜ / 0 ✅; `scripts/sync.py` again prints `no changes`; `grep -c '^<tr id="e' index.html` prints 6345; `grep -o '<tr id="e[0-9]*"' index.html | tail -1` ends with `e7498`.
+- [ ] **Step 3: Verify the diff check accepts it:** commit, then `scripts/check.py --diff main` exits 0 (sync mode).
 - [ ] **Step 4: Commit** `feat: seed 6345 OPP entities`.
 
 ### Task 5: Page (`app.css`, `app.js`) and page test
@@ -102,7 +102,7 @@
 **Files:**
 - Create: `app.css`, `app.js`, `tests/rows.txt`
 - Reference (copy markup and styles from it, do not redesign): `docs/mockup/index.html`, `docs/mockup/app.css`, `docs/mockup/DESIGN-VISUAL.md`
-- Modify: `scripts/test`
+- Modify: `scripts/test.py`
 
 **Interfaces:**
 - Consumes: shell element ids from task 3: `#filters`, `#count`, `#pager`, `#rows`, `th[data-k]`.
@@ -123,8 +123,8 @@
 **Files:**
 - Create: `.github/workflows/check.yml` (exactly DESIGN §6), `README.md`
 
-- [ ] **Step 1: Write `.github/workflows/check.yml`** per DESIGN §6, and `README.md`: what the project is, orchestrator commands (the grep pair, `scripts/sync`), the one-line row contract (link to `SPEC.md` §5), how to run `scripts/test`. Keep it under 60 lines.
-- [ ] **Step 2: Run `scripts/test` and `scripts/check index.html`; expected both exit 0.**
+- [ ] **Step 1: Write `.github/workflows/check.yml`** per DESIGN §6, and `README.md`: what the project is, orchestrator commands (the grep pair, `scripts/sync.py`), the one-line row contract (link to `SPEC.md` §5), how to run `scripts/test.py`. Keep it under 60 lines.
+- [ ] **Step 2: Run `scripts/test.py` and `scripts/check.py index.html`; expected both exit 0.**
 - [ ] **Step 3: Commit** `ci: add check workflow and README`; push the branch; `gh pr create`; report branch name and PR URL. Do not merge.
 - [ ] **Step 4 (human, after merge):** repo Settings → Pages → "Deploy from a branch" → `main` / root; branch protection on `main` requiring the `check` job and 1 review. Verify `https://davidgomesdev.github.io/intern-quest/` loads and shows `6345`.
 

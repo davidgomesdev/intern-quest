@@ -10,8 +10,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 
 def load(name):
-    """Load scripts/<name> (no .py) as a module, or None if it does not exist yet."""
-    path = os.path.join(HERE, name)
+    """Load scripts/<name>.py as a module, or None if it does not exist yet."""
+    path = os.path.join(HERE, name + ".py")
     if not os.path.exists(path):
         return None
     loader = SourceFileLoader(name, path)
@@ -162,7 +162,7 @@ def test_check_diff():
     new = "\n".join(["diff --git a/index.html b/index.html", "new file mode 100644",
                     "--- /dev/null", "+++ b/index.html", "@@ -0,0 +1,5 @@",
                     "+<!doctype html>", "+<table>", "+" + r1, "+" + r2, "+</table>"]) + "\n"
-    assert cd(new, ["index.html", "scripts/check"], None) == []
+    assert cd(new, ["index.html", "scripts/check.py"], None) == []
     assert cd(new.replace("+" + r2, "+" + f2), ["index.html"], None)
     assert cd(diff((r1, None)), html, None)
     assert cd(diff((None, R("0002", name=""))), html, None)
@@ -258,13 +258,13 @@ def test_sync_abort():
         empty = os.path.join(d, "empty.html")
         with open(empty, "w") as fh:
             fh.write("<html><body></body></html>")
-        r = subprocess.run([sys.executable, os.path.join(HERE, "sync"), "--from", empty, "--file", f, "--min-rows", "1"],
+        r = subprocess.run([sys.executable, os.path.join(HERE, "sync.py"), "--from", empty, "--file", f, "--min-rows", "1"],
                            capture_output=True, text=True)
         assert r.returncode == 1, r
         assert open(f, "rb").read() == before
         # CLI happy path: writes, then no-op
         a = os.path.join(FIX, "opp-b.html")
-        cmd = [sys.executable, os.path.join(HERE, "sync"), "--from", a, "--file", f, "--min-rows", "1"]
+        cmd = [sys.executable, os.path.join(HERE, "sync.py"), "--from", a, "--file", f, "--min-rows", "1"]
         r = subprocess.run(cmd, capture_output=True, text=True)
         assert r.returncode == 0 and "+3 new" in r.stdout and "-1 removed" in r.stdout and "~1 renamed" in r.stdout, r.stdout
         mid = open(f, "rb").read()

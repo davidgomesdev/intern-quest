@@ -11,9 +11,9 @@ app.css                    all styles
 app.js                     all behaviour (≈250 lines)
 .nojekyll                  serve files raw, skip the Jekyll build
 README.md  SPEC.md  DESIGN.md
-scripts/sync               OPP → index.html (also the seed, see §5.1)
-scripts/check              row/file/diff validator (CI + local)
-scripts/test               runs every check in §7
+scripts/sync.py               OPP → index.html (also the seed, see §5.1)
+scripts/check.py              row/file/diff validator (CI + local)
+scripts/test.py               runs every check in §7
 tests/opp-a.html  tests/opp-b.html   tiny OPP fixtures (3–4 rows each)
 .github/workflows/check.yml
 .claude/skills/fill-entity/SKILL.md  subagent skill (written later)
@@ -21,7 +21,7 @@ tests/opp-a.html  tests/opp-b.html   tiny OPP fixtures (3–4 rows each)
 
 Why:
 - **CSS/JS in sibling files, not inline.** Code PRs then never touch `index.html`, so the CI rule "an entity PR changes exactly one line of index.html" stays strict without exceptions for code edits. The browser can cache both files separately from the 2–3 MB data page.
-- **Extensionless Python scripts** (`#!/usr/bin/env python3`), matching the spec's `scripts/sync`. They share no module. Each is small enough to copy the row regex.
+- **Python scripts with a `.py` extension** (`#!/usr/bin/env python3`, executable), matching the spec's `scripts/sync.py`. They share no module. Each is small enough to copy the row regex.
 - **`.nojekyll`.** Without it, Pages runs Jekyll, which renders `*.md` and ignores dot-dirs. With it the files are served as they are, which is faster and has no surprises.
 
 ## 2. index.html structure
@@ -221,7 +221,7 @@ Mobile wireframe:
 
 ## 5. Scripts
 
-### 5.1 `scripts/sync [--from FILE] [--file index.html]` (seed included)
+### 5.1 `scripts/sync.py [--from FILE] [--file index.html]` (seed included)
 
 - **Input:** the OPP page from the network (`urllib`), or `--from` a saved HTML file (used by tests and offline runs). It is parsed with `html.parser` into `{id:int → name}` from `table.mainlisting`. It aborts if it finds fewer than 1,000 rows, which guards against a broken fetch flagging everything as removed.
 - **index.html:** lines matching `^<tr id="e(\d{4})"` are rows; every other line passes through untouched.
@@ -239,13 +239,13 @@ Mobile wireframe:
   ```
 
   Exit code 0. The script prints "no changes" and leaves the file alone if `+`, `-` and `~` are all zero.
-- **Seed = sync on an empty tbody.** The repo starts with the shell `index.html` (an empty `<tbody id="rows">`). The first `scripts/sync` inserts 6,345 new ⬜ rows. That gives determinism and idempotency for free: same input, same bytes; a second run is a no-op. No separate seed script is needed (decision D1).
+- **Seed = sync on an empty tbody.** The repo starts with the shell `index.html` (an empty `<tbody id="rows">`). The first `scripts/sync.py` inserts 6,345 new ⬜ rows. That gives determinism and idempotency for free: same input, same bytes; a second run is a no-op. No separate seed script is needed (decision D1).
 - **Re-adding:** if an id flagged `data-removed` reappears in OPP, the flag is removed and reported as "re-added".
 
-### 5.2 `scripts/check`
+### 5.2 `scripts/check.py`
 
-- `scripts/check FILE` lints the whole file (run in CI and locally).
-- `scripts/check --diff BASE_REF [--branch NAME]` checks the PR diff.
+- `scripts/check.py FILE` lints the whole file (run in CI and locally).
+- `scripts/check.py --diff BASE_REF [--branch NAME]` checks the PR diff.
 
 Row shape. A Python regex; `ESC` is the allowed HTML text:
 
@@ -302,18 +302,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
-      - run: scripts/check index.html
+      - run: scripts/check.py index.html
       - if: github.event_name == 'pull_request'
         env: { BASE: "${{ github.base_ref }}", HEAD: "${{ github.head_ref }}" }
-        run: scripts/check --diff "origin/$BASE" --branch "$HEAD"
-      - run: scripts/test
+        run: scripts/check.py --diff "origin/$BASE" --branch "$HEAD"
+      - run: scripts/test.py
 ```
 
 - Mark `check` as a required status check under branch protection on `main`, and require 1 review. Nothing auto-merges.
 - **Pages:** Settings → Pages → "Deploy from a branch" → `main` / `(root)`, as the spec confirms. No deploy workflow is needed; `.nojekyll` makes it a plain file copy.
 - **Pages limit:** Pages has a soft limit of 10 builds per hour, and it applies to branch deployments; custom Actions workflows are exempt (GitHub docs). Merging more than 10 entity PRs in an hour may delay a build, but the latest commit still deploys. See D4.
 
-## 7. Test strategy (`scripts/test`, plain Python with asserts)
+## 7. Test strategy (`scripts/test.py`, plain Python with asserts)
 
 1. **check:** a list of about 15 inline lines (good and bad, one bad line per rule in §5.2) asserting accept or reject. Run `--diff` on two temporary git commits for entity mode, sync mode and a 2-line entity diff that must fail.
 2. **sync:** a temporary copy of the empty shell, then:
@@ -325,13 +325,13 @@ jobs:
    - `#count` text is the expected "2 de 5".
    - The first row id is as expected after `ord=nome&dir=desc`.
    - No `data-err` attribute is present. The fixture page has `window.onerror = e => document.documentElement.dataset.err = e`, which catches console errors without any framework.
-4. **real file:** `scripts/check index.html` (already a CI step).
+4. **real file:** `scripts/check.py index.html` (already a CI step).
 
 This adds no test framework and no dependencies. Locally, test 3 is skipped when no Chrome binary is found.
 
 ## 8. Decisions (all accepted as recommended)
 
-1. **D1: merge the seed into `scripts/sync`.** Seed = sync on an empty tbody. Recommendation: **yes**. It removes one script and makes seed determinism follow from idempotency.
+1. **D1: merge the seed into `scripts/sync.py`.** Seed = sync on an empty tbody. Recommendation: **yes**. It removes one script and makes seed determinism follow from idempotency.
 2. **D2: CSS/JS as sibling files** (`app.css`, `app.js`) rather than inline in `index.html`. Recommendation: **siblings**, so entity PRs and code PRs never touch the same file.
 3. **D3: mobile layout.** Stacked cards below 720px, or a horizontally scrolling 11-column table. Recommendation: **cards**, because a scrolling table is unusable on a phone and cards need only CSS plus one sort `<select>`.
 4. **D4: Pages deploy.** Keep "Deploy from branch main /root" (spec), or switch to an Actions deploy workflow that serves the same files and avoids the 10 builds/hour soft limit. Recommendation: **keep branch deploy**, merge in batches, and switch only if builds visibly lag.
@@ -340,7 +340,7 @@ This adds no test framework and no dependencies. Locally, test 3 is skipped when
 ## 9. Spec issues (items 1, 2, 3, 6 fixed in SPEC.md: grep pattern, repo contents, `tel:` phone format with `+<cc> <digits>` validation, ids of at least 4 digits with `e[0-9]{4,}`)
 
 1. **`data-removed` vs the grep contract (§5, §7.1).** `grep -m1 '<td>⬜</td>'` will hand removed rows to subagents. Fix: the orchestrator uses `grep -m1 '^<tr id="e[0-9]*"><td>⬜'`, which excludes rows with the attribute. The subagent read `grep '^<tr id="e0001">'` then finds nothing for a removed row, which is correct, but the skill must say "no match means stop".
-2. **§3 repo contents is incomplete.** It omits `scripts/sync`, `scripts/check`, the CI workflow, `app.css`/`app.js`, `.nojekyll` and test fixtures.
+2. **§3 repo contents is incomplete.** It omits `scripts/sync.py`, `scripts/check.py`, the CI workflow, `app.css`/`app.js`, `.nojekyll` and test fixtures.
 3. **Telefone "digits and spaces only" (§4).** This forbids `+351`, extensions and a second number. Either allow `\+?\d[\d ]*\d` and `;`-separated numbers, or accept the loss (extra numbers go in Adicional). The same applies to a second e-mail. The validator follows the spec until you decide.
 4. **§6.2 says filters exist "only" on Nome/Cidade/Áreas/Distrito,** but Status (§6.2) and "show removed" (§7.5) are filters too. This is wording only.
 5. **§8 seed check "all start ⬜".** This holds only on an empty file. The seed must never run against a populated `index.html` (solved by D1).

@@ -97,6 +97,53 @@ def test_check_file(tmp=None):
     assert run([r1, "<tr id=\"e0002\"><td>x</td></tr>"])
 
 
+def diff(*pairs, extra=()):
+    """Build a --unified=0 diff of index.html from (old, new) pairs; None = no line."""
+    out = ["diff --git a/index.html b/index.html", "index 1..2 100644",
+           "--- a/index.html", "+++ b/index.html"]
+    for i, (o, n) in enumerate(pairs, 1):
+        out.append(f"@@ -{i} +{i} @@")
+        if o is not None:
+            out.append("-" + o)
+        if n is not None:
+            out.append("+" + n)
+    for o, n in extra:
+        out.append("@@ -99 +99 @@")
+        out += ["-" + o, "+" + n]
+    return "\n".join(out) + "\n"
+
+
+def test_check_diff():
+    cd = check.check_diff
+    R = lambda n, status="⬜", name="N", attr="": row(
+        [status, n, name] + ([""] * 8 if status == "⬜" else FILLED_CELLS[3:]),
+        id_="e" + n, attr=attr)
+    r1, r2 = R("0001"), R("0002")
+    f1, f2 = R("0001", "✅"), R("0002", "✅")
+    html = ["index.html"]
+    # entity mode
+    assert cd(diff((r1, f1)), html, None) == []
+    assert cd(diff((r1, f1)), html, "feat/e0001-fill") == []
+    assert cd(diff((r1, f1)), html, "feat/e0002-fill")
+    assert cd(diff((r1, f1), (r2, f2)), html, None)
+    assert cd(diff((r1, R("0001", "✅", name="Other"))), html, None)
+    assert cd(diff((r1, R("0001", "✅", attr=' data-removed="1"'))), html, None)
+    assert cd(diff((r1, f1), extra=[("<p>a</p>", "<p>b</p>")]), html, None)
+    assert cd(diff((r1, f1)), ["index.html", "app.js"], None)
+    assert cd(diff((r1, filled(c3="")), ), html, None)  # invalid filled row
+    # sync mode
+    assert cd(diff((None, r2)), html, None) == []
+    assert cd(diff((r1, R("0001", attr=' data-removed="1"'))), html, None) == []
+    assert cd(diff((R("0001", attr=' data-removed="1"'), r1)), html, None) == []
+    assert cd(diff((None, f2)), html, None)
+    assert cd(diff((r1, None)), html, None)
+    assert cd(diff((None, R("0002", name=""))), html, None)
+    assert cd(diff((None, r2), (r1, f1)), html, None)
+    # no row change
+    assert cd("", ["app.js"], None) == []
+    assert cd(diff(extra=[("<p>a</p>", "<p>b</p>")]), ["index.html", "app.js"], None) == []
+
+
 def main():
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
     for name, fn in tests:

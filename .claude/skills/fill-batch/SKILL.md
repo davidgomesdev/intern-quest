@@ -67,4 +67,4 @@ Nome is the third `<td>` of the row from step 2 (copy it exactly). Use `—` onl
 
 Then: `Remaining ⬜: ` + output of `grep -c '^<tr id="e[0-9]*"><td>⬜' index.html`.
 
-Do not retry failures automatically, and never merge a PR. A human reviews each one.
+Do not retry failures automatically, and never merge a PR yourself. Each subagent merges its own PR only after CI passes; a PR whose CI failed stays open for a human.

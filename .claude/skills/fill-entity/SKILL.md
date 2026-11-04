@@ -5,7 +5,7 @@ description: Use when given one OPP protocol number (e.g. 0001) and asked to res
 
 # Fill one entity
 
-Input: one protocol number. Output: one PR that changes exactly one line of `index.html`. The row format is the contract in `SPEC.md` §4 and §5; this skill is the procedure.
+Input: one protocol number. Output: one PR that changes exactly one line of `index.html`, merged once CI passes. The row format is the contract in `SPEC.md` §4 and §5; this skill is the procedure.
 
 Below, `ID` is the number zero-padded to at least 4 digits (`1` → `0001`, `10000` stays `10000`).
 
@@ -106,7 +106,21 @@ Sources:
 - URL2"
 ```
 
-List every page you took a value from. No co-author trailers. Never use `--no-verify` or skip signing. If a hook or signing fails, stop and report the exact error. Never merge.
+List every page you took a value from. No co-author trailers. Never use `--no-verify` or skip signing. If a hook or signing fails, stop and report the exact error.
+
+## 6b. Wait for CI, merge
+
+This skill overrides the global "never merge" rule: merge only after CI succeeds.
+
+```bash
+sleep 20   # let checks register
+gh pr checks --watch --fail-fast
+```
+
+- Exit 0 (all pass): `gh pr merge --squash` (no `--delete-branch`; the branch is checked out in the worktree). Then `git push origin --delete feat/eID-fill`.
+- Non-zero exit (a check failed): do not merge. Report `FAILED: CI failed <PR URL>`.
+- "no checks reported" after a second attempt 30s later: do not merge. Report `FAILED: no CI checks <PR URL>`.
+- Merge refused (conflict, branch protection): do not retry or bypass. Report `FAILED: merge refused: <reason>`.
 
 ## 7. Clean up and report
 
@@ -114,4 +128,4 @@ List every page you took a value from. No co-author trailers. Never use `--no-ve
 cd "$(git rev-parse --git-common-dir)/.." && git worktree remove ../intern-quest-eID
 ```
 
-Final message, one line, always with the Nome as read in step 2: `eID | NOME | <PR URL>`, or `eID | NOME | FAILED: <reason>`. If step 2 found no row, use `—` for NOME.
+Final message, one line, always with the Nome as read in step 2: `eID | NOME | <PR URL> merged`, or `eID | NOME | FAILED: <reason>`. If step 2 found no row, use `—` for NOME.

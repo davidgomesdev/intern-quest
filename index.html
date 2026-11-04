@@ -19,19 +19,19 @@
 
 <main>
 <details id="painel" open>
-<summary>Filtros <span id="ativos">(2 ativos)</span></summary>
+<summary>Filtros <span id="ativos"></span></summary>
 <form id="filters" role="search" aria-label="Filtrar entidades">
   <div class="campos">
     <label class="campo nome">Nome da entidade <input type="search" name="nome" autocomplete="off" placeholder="ex.: Santa Casa, clínica, agrupamento…"></label>
     <label class="campo">Cidade <input type="search" name="cidade" list="cidades" autocomplete="off"></label>
-    <label class="campo">Só esta cidade <select name="c"><option value="">Todas</option><option>Braga</option><option>Cascais</option><option>Coimbra</option><option>Vila Nova de Gaia</option></select></label>
-    <label class="campo">Distrito <select name="d"><option value="">Todos</option><option>Aveiro</option><option>Lisboa</option><option>Porto</option><option value="desconhecido">Desconhecido</option></select></label>
+    <label class="campo">Só esta cidade <select name="c"><option value="">Todas</option></select></label>
+    <label class="campo">Distrito <select name="d"><option value="">Todos</option><option value="desconhecido">Desconhecido</option></select></label>
   </div>
-  <datalist id="cidades"><option value="Braga"><option value="Cascais"><option value="Coimbra"><option value="Vila Nova de Gaia"></datalist>
+  <datalist id="cidades"></datalist>
   <fieldset>
     <legend>Áreas de atuação</legend>
     <div class="opcoes">
-      <label class="toggle"><input type="checkbox" name="a" value="clinica" checked><span><span aria-hidden="true">🩺</span> Clínica e da Saúde</span></label>
+      <label class="toggle"><input type="checkbox" name="a" value="clinica"><span><span aria-hidden="true">🩺</span> Clínica e da Saúde</span></label>
       <label class="toggle"><input type="checkbox" name="a" value="neuropsicologia"><span><span aria-hidden="true">🧠</span> Neuropsicologia</span></label>
       <label class="toggle"><input type="checkbox" name="a" value="psicoterapia"><span><span aria-hidden="true">💬</span> Psicoterapia</span></label>
       <label class="toggle"><input type="checkbox" name="a" value="educacao"><span><span aria-hidden="true">🎓</span> Educação</span></label>
@@ -58,10 +58,10 @@
 </details>
 
 <div class="barra">
-  <p id="count" aria-live="polite"><strong>1204</strong> de 6345 entidades, 802 com dados</p>
+  <p id="count" aria-live="polite"></p>
   <nav class="pager" aria-label="Paginação">
     <button type="button" data-p="prev" disabled>‹ Anterior</button>
-    <span>Página 1 de 25</span>
+    <span></span>
     <button type="button" data-p="next">Seguinte ›</button>
   </nav>
 </div>
@@ -94,7 +94,7 @@
 
 <nav class="pager pager-fim" aria-label="Paginação, fim da lista">
   <button type="button" data-p="prev" disabled>‹ Anterior</button>
-  <span>Página 1 de 25</span>
+  <span></span>
   <button type="button" data-p="next">Seguinte ›</button>
 </nav>
 </main>

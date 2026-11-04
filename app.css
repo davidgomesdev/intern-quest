@@ -1,0 +1,201 @@
+/* Intern Quest: app.css. System fonts only, no external requests.
+   Layout: the real <table> is displayed as a list of entity cards; thead becomes a bar of sort pills. */
+
+:root {
+  color-scheme: light dark;
+  --bg: #f6f6f7;       /* page */
+  --card: #ffffff;     /* entity cards, filter panel, fields */
+  --soft: #fff4ea;     /* orange wash: disclaimer, card hover, checked chip */
+  --fg: #26221f;
+  --muted: #65605a;    /* indisponível, desconhecido, secondary text */
+  --line: #e6e2de;     /* card borders (decorative) */
+  --edge: #8e8780;     /* field and pill borders (≥3:1) */
+  --accent: #a94700;   /* orange ink: links, focus ring, active sort */
+  --rule: #f08a24;     /* bright orange: decorative only, never text */
+  --chip: #fff0e1;     /* área pills */
+  --chip-fg: #7a3300;
+  --warn: #a3261b;     /* "removida da OPP" */
+  --warn-bg: #fdeeec;
+
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+  --round: ui-rounded, "SF Pro Rounded", "Arial Rounded MT Bold", "Nunito", "Varela Round", system-ui, sans-serif;
+  --r-card: 14px; --r-field: 10px; --r-pill: 999px;
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161618; --card: #212124; --soft: #2e2219;
+    --fg: #ecebe8; --muted: #a8a39d; --line: #34322f; --edge: #7a746e;
+    --accent: #ffa95e; --rule: #e07a1f; --chip: #3a2818; --chip-fg: #ffd0a3;
+    --warn: #ff9a8f; --warn-bg: #3b1c19;
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 var(--sans); }
+.pagina { max-width: 1120px; margin: 0 auto; padding: 0 var(--s4); }
+a { color: var(--accent); text-underline-offset: 3px; text-decoration-thickness: 1px; }
+a:hover { text-decoration-thickness: 2px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+[hidden] { display: none !important; }
+.vh { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+
+/* ---------- Header ---------- */
+.topo { padding: var(--s6) 0 var(--s5); }
+.topo h1 { margin: 0; font: 700 34px/1.1 var(--round); letter-spacing: -0.01em; }
+.topo h1 .marca { color: var(--rule); }
+.topo .sub { margin: var(--s2) 0 var(--s4); font-size: 17px; color: var(--muted); max-width: 60ch; }
+.aviso { margin: 0; padding: var(--s3) var(--s4); max-width: 78ch; background: var(--soft); border-radius: var(--r-card); font-size: 14px; }
+.aviso strong { font-weight: 600; }
+.semjs { margin: 0 0 var(--s3); font-size: 14px; color: var(--muted); }
+
+/* ---------- Filter panel ---------- */
+#painel { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-card); }
+#painel > summary { padding: var(--s3) var(--s4); font-weight: 600; cursor: pointer; border-radius: var(--r-card); }
+#painel > summary #ativos { font-weight: 400; color: var(--muted); }
+html:not(.js) #painel, html:not(.js) .barra, html:not(.js) .pager, html:not(.js) thead { display: none; }
+#filters { padding: 0 var(--s4) var(--s4); display: grid; gap: var(--s4); }
+.campos { display: flex; flex-wrap: wrap; gap: var(--s3); align-items: end; }
+.campo { display: grid; gap: 4px; font-size: 13px; font-weight: 500; }
+.campo input, .campo select {
+  font: 15px/1.3 var(--sans); color: var(--fg); background: var(--card);
+  border: 1px solid var(--edge); border-radius: var(--r-field); padding: 7px 12px; min-height: 38px;
+}
+.campo.nome { flex: 1 1 18rem; }
+.campo.nome input[type="search"] { width: 100%; }
+.campo input[type="search"] { width: 15ch; }
+.campo select { max-width: 22ch; }
+fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+legend { padding: 0; font-size: 13px; font-weight: 500; margin-bottom: 6px; }
+.grupo { display: flex; flex-wrap: wrap; gap: var(--s3) var(--s4); align-items: center; }
+.opcoes { display: flex; flex-wrap: wrap; gap: var(--s2); }
+
+/* checkbox / radio as pills; the native input stays the clicked and focused control */
+.toggle { position: relative; display: inline-flex; cursor: pointer; font-size: 14px; }
+.toggle input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.toggle input + span { padding: 5px 12px; border: 1px solid var(--edge); border-radius: var(--r-pill); background: var(--card); line-height: 1.3; }
+.toggle:hover input + span { border-color: var(--accent); }
+.toggle input:checked + span { background: var(--soft); border-color: var(--accent); color: var(--chip-fg); font-weight: 600; }
+.toggle input:checked + span::after { content: "\00a0✓"; }
+.toggle input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.toggle input[value="desconhecido"] + span { border-style: dashed; }
+.seg { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.check { display: inline-flex; gap: 8px; align-items: center; font-size: 14px; cursor: pointer; }
+.check input { accent-color: var(--accent); width: 18px; height: 18px; margin: 0; }
+
+button.limpar, .pager button, #vazio button {
+  font: 600 14px/1.3 var(--sans); color: var(--accent); background: var(--card);
+  border: 1px solid var(--edge); border-radius: var(--r-pill); padding: 7px 16px; min-height: 38px; cursor: pointer;
+}
+button.limpar { margin-left: auto; }
+button:hover:not(:disabled) { border-color: var(--accent); background: var(--soft); }
+button:disabled { color: var(--muted); border-style: dashed; cursor: default; }
+
+/* ---------- Count + pager ---------- */
+.barra, .pager-fim { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s4); align-items: center; padding: var(--s4) 0 var(--s2); }
+#count { margin: 0; font-size: 15px; }
+#count strong { font: 700 20px/1 var(--round); font-variant-numeric: tabular-nums; }
+.pager { margin-left: auto; display: flex; gap: var(--s2); align-items: center; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.pager-fim { justify-content: center; padding-bottom: var(--s5); }
+.pager-fim.pager { margin: 0; }
+#vazio { margin: var(--s3) 0 var(--s5); padding: var(--s6) var(--s4); text-align: center; background: var(--card); border: 1px dashed var(--edge); border-radius: var(--r-card); }
+#vazio .grande { display: block; font-size: 32px; margin-bottom: var(--s2); }
+#vazio p { margin: 0 auto var(--s3); max-width: 46ch; }
+
+/* ---------- The table, as a list ---------- */
+table, thead, tbody, tr, th, td, caption { display: block; }
+table { font-size: 14px; line-height: 1.45; }
+.js #rows:not(.ready) { display: none; }
+
+/* thead = sort bar of pills */
+thead { position: sticky; top: 0; z-index: 2; background: var(--bg); padding: var(--s2) 0; }
+thead tr { display: flex; gap: 6px; align-items: center; overflow-x: auto; scrollbar-width: thin; padding: 2px; }
+thead tr::before { content: "Ordenar por"; flex: none; font-size: 13px; color: var(--muted); margin-right: 4px; }
+th { flex: none; padding: 0; }
+thead button {
+  font: 500 13px/1.3 var(--sans); color: var(--fg); background: var(--card); cursor: pointer;
+  border: 1px solid var(--line); border-radius: var(--r-pill); padding: 4px 11px; white-space: nowrap;
+}
+thead button:hover { border-color: var(--accent); }
+th[aria-sort] button { background: var(--soft); border-color: var(--accent); color: var(--chip-fg); font-weight: 600; }
+th[aria-sort="ascending"] button::after { content: "\00a0↑"; }
+th[aria-sort="descending"] button::after { content: "\00a0↓"; }
+
+/* each row = a card. Grid: status | cidade | distrito | contacts */
+tbody { display: grid; gap: 10px; padding-top: var(--s1); }
+tbody tr {
+  display: grid; grid-template-columns: 2.25rem auto minmax(0, 1fr) minmax(13rem, 17rem);
+  align-items: baseline; row-gap: 4px;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--r-card); padding: var(--s3) var(--s4) var(--s3) var(--s3);
+}
+tbody tr:hover { border-color: var(--rule); }
+td { padding: 0; min-width: 0; }
+td:empty { display: none; }
+td i { color: var(--muted); }
+
+td:nth-child(1) { grid-column: 1; grid-row: 1; align-self: start; font-size: 20px; line-height: 1.2; }
+td:nth-child(3) { grid-column: 2 / 4; grid-row: 1; font-size: 17px; font-weight: 600; line-height: 1.3; padding-right: var(--s3); }
+td:nth-child(2) { grid-column: 4; grid-row: 1; justify-self: end; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+td:nth-child(2)::before { content: "Nº "; }
+td:nth-child(4) { grid-column: 2; grid-row: 2; font-weight: 500; }
+td:nth-child(4)::before { content: "📍" / ""; margin-right: 4px; font-style: normal; }
+td:nth-child(5) { grid-column: 3; grid-row: 2; color: var(--muted); }
+td:nth-child(5)::before { content: ",\00a0"; }
+td:nth-child(5):has(> i)::before { content: ",\00a0 distrito\00a0 "; }
+td:nth-child(6) { grid-column: 2 / 4; grid-row: 3; color: var(--muted); font-size: 13.5px; padding-right: var(--s3); }
+td:nth-child(6):has(> i)::before { content: "Morada:\00a0 "; }
+td:nth-child(7) { grid-column: 2 / 4; grid-row: 4; padding: 4px var(--s3) 2px 0; }
+td:nth-child(7):has(> i)::before { content: "Áreas:\00a0 "; color: var(--muted); }
+td:nth-child(8) { grid-column: 2 / 4; grid-row: 5; padding-right: var(--s3); }
+td:nth-child(8):not(:has(> i)) { padding-left: 10px; border-left: 2px solid var(--rule); }
+td:nth-child(8):has(> i)::before { content: "Adicional:\00a0 "; color: var(--muted); }
+td:nth-child(9), td:nth-child(10), td:nth-child(11) { grid-column: 4; padding-left: var(--s4); font-size: 13.5px; overflow-wrap: anywhere; }
+td:nth-child(9) { grid-row: 2; } td:nth-child(10) { grid-row: 3; } td:nth-child(11) { grid-row: 4; font-variant-numeric: tabular-nums; }
+td:nth-child(9)::before { content: "🌐" / ""; } td:nth-child(10)::before { content: "✉️" / ""; } td:nth-child(11)::before { content: "📞" / ""; }
+td:nth-child(n+9):nth-child(-n+11)::before { display: inline-block; width: 1.6em; font-style: normal; }
+
+/* ⬜ rows: lighter card, one friendly line instead of empty fields */
+tbody tr:has(.st-todo) { background: transparent; border-style: dashed; }
+tbody tr:has(.st-todo) td:nth-child(3) { font-weight: 500; }
+tbody tr:has(.st-todo):not([data-removed]) td:nth-child(3)::after {
+  content: "Ainda sem morada nem contactos."; display: block; font-size: 13.5px; font-weight: 400; color: var(--muted);
+}
+tr[data-removed] td:nth-child(3) { color: var(--muted); }
+
+/* cell enhancements */
+.st { line-height: 1; }
+.areas { display: flex; flex-wrap: wrap; gap: 6px; }
+.area { display: inline-flex; gap: 5px; align-items: baseline; padding: 2px 10px; border-radius: var(--r-pill); background: var(--chip); color: var(--chip-fg); font-size: 13px; font-weight: 500; }
+.removida { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: var(--r-pill); color: var(--warn); background: var(--warn-bg); font-size: 12px; font-weight: 600; vertical-align: 2px; }
+
+footer { padding: var(--s4) 0 var(--s6); font-size: 13px; color: var(--muted); }
+
+/* ---------- Mobile: single-column cards ---------- */
+@media (max-width: 719px) {
+  .topo { padding-top: var(--s5); }
+  .topo h1 { font-size: 28px; }
+  .topo .sub { font-size: 16px; }
+  .campos .campo { flex: 1 1 100%; }
+  .campo input[type="search"], .campo select { width: 100%; max-width: none; min-height: 44px; font-size: 16px; }
+  .toggle input + span { padding: 7px 12px; }
+  button.limpar { margin-left: 0; }
+  .pager { margin-left: 0; width: 100%; justify-content: space-between; }
+  tbody tr { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 0; padding: var(--s3); }
+  td:nth-child(n) { flex: 1 1 100%; padding-left: 0; padding-right: 0; }
+  td:nth-child(1) { flex: 0 0 auto; font-size: 18px; margin-right: 8px; }
+  td:nth-child(2) { flex: 1 1 auto; text-align: right; }
+  td:nth-child(4), td:nth-child(5) { flex: 0 1 auto; }
+  td:nth-child(8):not(:has(> i)) { padding-left: 10px; }
+  td:nth-child(9), td:nth-child(10), td:nth-child(11) { font-size: 14px; }
+  td:nth-child(9) { margin-top: 4px; }
+  td:nth-child(n+9):nth-child(-n+11) a { display: inline-block; padding: 3px 0; }
+}
+
+@media print {
+  #painel, .barra, .pager-fim, thead { display: none; }
+  tbody tr { break-inside: avoid; }
+}
+
+/* columns that are not sortable: kept for screen readers, hidden from the sort bar */
+th.nosort{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}

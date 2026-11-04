@@ -303,7 +303,8 @@ jobs:
         with: { fetch-depth: 0 }
       - run: scripts/check index.html
       - if: github.event_name == 'pull_request'
-        run: scripts/check --diff origin/${{ github.base_ref }} --branch ${{ github.head_ref }}
+        env: { BASE: "${{ github.base_ref }}", HEAD: "${{ github.head_ref }}" }
+        run: scripts/check --diff "origin/$BASE" --branch "$HEAD"
       - run: scripts/test
 ```
 

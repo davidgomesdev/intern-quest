@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Plain test runner: runs every test_* function below, exits 1 on first failure."""
-import os, sys, traceback
+import os, re, shutil, subprocess, sys, tempfile, traceback, unicodedata
 
 sys.dont_write_bytecode = True
 from importlib.machinery import SourceFileLoader
@@ -157,8 +157,9 @@ FIX = os.path.join(os.path.dirname(HERE), "tests")
 
 
 def _shell_lines():
+    """index.html without its entity rows: the empty shell the sync tests start from."""
     with open(SHELL, encoding="utf-8") as f:
-        return f.read().split("\n")
+        return [l for l in f.read().split("\n") if not l.startswith('<tr id="e')]
 
 
 def _opp(name):
@@ -258,6 +259,85 @@ def test_sync_wide_id():
     assert 'id="e9999"' in rows[0] and 'id="e10000"' in rows[1]
     assert all(check.check_row(r) == [] for r in rows)
     assert _sync(out, {9999: "Nove", 10000: "Dez mil"})[0] == out
+
+
+def _chrome():
+    for c in [os.environ.get("CHROME"), "google-chrome", "chromium",
+              "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"]:
+        if c and shutil.which(c):
+            return shutil.which(c)
+
+
+def _fold(s):
+    return "".join(ch for ch in unicodedata.normalize("NFD", s) if not unicodedata.combining(ch)).lower()
+
+
+def test_page():
+    chrome = _chrome()
+    if not chrome:
+        print("     (test_page skipped: no Chrome found, set $CHROME)")
+        return
+    root = os.path.dirname(HERE)
+    with open(os.path.join(FIX, "rows.txt"), encoding="utf-8") as f:
+        fixture = f.read().rstrip("\n").split("\n")
+    lines = []
+    for l in _shell_lines():
+        lines.append(l)
+        if l.startswith("<head>"):
+            lines.append(f'<base href="file://{root}/">')
+            lines.append("<script>window.onerror=e=>document.documentElement.dataset.err=e</script>")
+        if l.startswith('<tbody id="rows"'):
+            lines += fixture
+    with tempfile.TemporaryDirectory() as tmp:
+        page = os.path.join(tmp, "page.html")
+        with open(page, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines))
+
+        def dump(h=""):
+            r = subprocess.run([chrome, "--headless", "--disable-gpu", "--no-sandbox", "--dump-dom",
+                                f"--user-data-dir={tmp}/profile", f"file://{page}#{h}"],
+                               capture_output=True, text=True, timeout=60)
+            assert r.returncode == 0, r.stderr
+            return r.stdout
+
+        def count(dom):
+            m = re.search(r'<p id="count"[^>]*>(.*?)</p>', dom, re.S)
+            return re.sub(r"<[^>]+>", "", m.group(1)) if m else ""
+
+        def ids(dom):
+            body = dom.split('<tbody id="rows"', 1)[1].split("</tbody>", 1)[0]
+            return re.findall(r'<tr id="(e\d+)"', body)
+
+        for h, want in [("", "5 de 5"), ("a=clinica", "2 de 5"), ("a=clinica,neuropsicologia", "3 de 5"),
+                        ("cidade=lisboa", "1 de 5"), ("cidade=LISBOA", "1 de 5"), ("d=desconhecido", "1 de 5"),
+                        ("estado=todo", "1 de 5"), ("rem=1", "6 de 6"), ("nome=zzz", "0 de 5"),
+                        ("p=999&a=bogus&ord=zzz", "5 de 5"), ("ord=morada", "5 de 5")]:
+            dom = dump(h)
+            assert "data-err" not in dom, (h, "page error")
+            assert count(dom).startswith(want), (h, count(dom), want)
+
+        dom = dump("nome=zzz")
+        assert ids(dom) == [] and not re.search(r"<div id=\"vazio\"[^>]*hidden", dom)
+        assert len(re.findall(r'data-p="(?:prev|next)"[^>]*disabled', dom)) == 4, "pager buttons must be disabled"
+        assert "pagina 1 de 1" in _fold(re.sub(r"<[^>]+>", "", dump())), "pager text"
+        assert ids(dump("ord=morada")) == ["e0001", "e0002", "e0003", "e0004", "e0005"]
+
+        names = {}
+        for l in fixture:
+            if 'data-removed' not in l:
+                names[re.match(r'<tr id="(e\d+)"', l).group(1)] = _fold(re.findall(r"<td>(.*?)</td>", l)[2])
+        last = max(names, key=names.get)
+        assert last == "e0005"
+        assert ids(dump("ord=nome&dir=desc"))[0] == last
+        assert ids(dump("ord=cidade&dir=asc")) == ["e0001", "e0003", "e0004", "e0002", "e0005"]
+        assert ids(dump("ord=cidade&dir=desc")) == ["e0004", "e0003", "e0001", "e0002", "e0005"]
+
+        dom = dump()
+        assert '<a href="tel:+351212345678">212 345 678</a>' in dom
+        assert '<a href="tel:+442079460958">+44 20 7946 0958</a>' in dom
+        dom = dump("rem=1")
+        assert "Café &amp; Co" in dom and "&amp;amp;" not in dom
+        assert "removida da OPP" in dom
 
 
 def main():

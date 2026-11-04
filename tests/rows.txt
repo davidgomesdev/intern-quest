@@ -1,0 +1,6 @@
+<tr id="e0001"><td>✅</td><td>0001</td><td>Clínica Alfa</td><td>Cascais</td><td>Lisboa</td><td>Rua A 1, 2750-000 Cascais</td><td>clinica educacao</td><td>Intervenção precoce</td><td>https://www.alfa.example</td><td>geral@alfa.example</td><td>+351 212 345 678</td></tr>
+<tr id="e0002"><td>⬜</td><td>0002</td><td>Beta Centro</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr id="e0003"><td>✅</td><td>0003</td><td>Ágata Lda</td><td>Lisboa</td><td>Lisboa</td><td>Rua C 3, 1000-000 Lisboa</td><td>clinica</td><td>Supervisão semanal</td><td>https://gata.example</td><td>info@gata.example</td><td>+351 213 000 003</td></tr>
+<tr id="e0004"><td>✅</td><td>0004</td><td>Delta</td><td>Porto</td><td>Porto</td><td>Rua D 4, 4000-000 Porto</td><td>neuropsicologia</td><td><i>indisponível</i></td><td>https://delta.example</td><td><i>indisponível</i></td><td>+44 20 7946 0958</td></tr>
+<tr id="e0005"><td>✅</td><td>0005</td><td>Épsilon</td><td><i>indisponível</i></td><td><i>desconhecido</i></td><td><i>indisponível</i></td><td><i>desconhecido</i></td><td><i>indisponível</i></td><td><i>indisponível</i></td><td><i>indisponível</i></td><td><i>indisponível</i></td></tr>
+<tr id="e0006" data-removed="1"><td>⬜</td><td>0006</td><td>Café &amp; Co</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>

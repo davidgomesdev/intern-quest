@@ -149,7 +149,7 @@ td:nth-child(7) { grid-column: 2 / 4; grid-row: 4; padding: 4px var(--s3) 2px 0;
 td:nth-child(7):has(> i)::before { content: "Áreas:\00a0 "; color: var(--muted); }
 td:nth-child(8) { grid-column: 2 / 4; grid-row: 5; padding-right: var(--s3); }
 td:nth-child(8):not(:has(> i)) { padding-left: 10px; border-left: 2px solid var(--rule); }
-td:nth-child(8):has(> i)::before { content: "Adicional:\00a0 "; color: var(--muted); }
+td:nth-child(8):has(> i) { display: none; }
 td:nth-child(9), td:nth-child(10), td:nth-child(11) { grid-column: 4; padding-left: var(--s4); font-size: 13.5px; overflow-wrap: anywhere; }
 td:nth-child(9) { grid-row: 2; } td:nth-child(10) { grid-row: 3; } td:nth-child(11) { grid-row: 4; font-variant-numeric: tabular-nums; }
 td:nth-child(9)::before { content: "🌐" / ""; } td:nth-child(10)::before { content: "✉️" / ""; } td:nth-child(11)::before { content: "📞" / ""; }

@@ -14,7 +14,7 @@ Below, `ID` is the number zero-padded to at least 4 digits (`1` → `0001`, `100
 Read-only, from the repo path you were given:
 
 ```bash
-grep '^<tr id="eID">' REPO/index.html
+grep '^<tr id="eID"[ >]' REPO/index.html
 ```
 
 - No output: the id does not exist or is flagged `data-removed`. Stop, report it.
@@ -70,7 +70,7 @@ Write `OUT/eID.json` with the Write tool. Plain values, no HTML, no escaping, no
 
 - A value you did not find on a page: `null` (or leave the key out). Never guess.
 - `areas`: slugs from the list above only, no duplicates; `[]` if none fit.
-- `sources`: every page you took a value from; `[]` if you found nothing.
+- `sources`: every page you took a value from, as full `http(s)` URLs; `[]` if you found nothing. They are shown on the site in a popup on the ✅ icon.
 - Fields still follow the formats in the table (URL starts with `http(s)://`, phone `+351 212 345 678` style).
 
 Do not open `index.html` in an editor; it has 6,000+ lines.

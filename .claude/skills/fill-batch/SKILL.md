@@ -25,7 +25,7 @@ grep -o '^<tr id="e[0-9]*"><td>⬜' index.html | sort -R | head -5 | grep -o '[0
 ## 2. Keep only dispatchable ids
 
 ```bash
-grep '^<tr id="eID">' index.html
+grep '^<tr id="eID"[ >]' index.html
 ```
 
 Drop, and report why, any id that has no match (unknown or `data-removed`) or is already `✅`. Adjacent rows are fine: commits are applied one after another on one branch.

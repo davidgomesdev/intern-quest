@@ -26,7 +26,7 @@ function parse() {
     const areas = miss(c[6]) ? (c[6].firstElementChild ? ['desconhecido'] : []) : c[6].textContent.split(' ');
     return { el, n: +c[1].textContent, ok: c[0].textContent === '✅', removed: 'removed' in el.dataset,
       nome: c[2].textContent, cidade: val(3), distrito: val(4), dUnk: !!c[4].firstElementChild, areas,
-      noLoc: c[0].textContent === '✅' && [c[3], c[4]].some(td => td.firstElementChild?.textContent === 'indisponível'),
+      notFound: c[0].textContent === '✅' && Array.from(c).slice(3).every(td => td.firstElementChild?.tagName === 'I'),
       kNome: norm(c[2].textContent), kCidade: norm(val(3) ?? ''), done: false };
   });
   TOTAL = ROWS.filter(r => !r.removed).length;
@@ -113,8 +113,8 @@ function enhance(r) {
   const c = r.el.cells, has = td => td.textContent && !td.firstElementChild;
   r.el.setAttribute('role', 'row');
   for (const td of c) td.setAttribute('role', 'cell');
-  const st = el('span', r.ok ? 'st' : 'st st-todo', r.noLoc ? '🔍' : c[0].textContent),
-    label = r.noLoc ? 'Preenchido, localização não encontrada' : r.ok ? 'Preenchido' : 'Por preencher';
+  const st = el('span', r.ok ? 'st' : 'st st-todo', r.notFound ? '🔍' : c[0].textContent),
+    label = r.notFound ? 'Pesquisado, nada encontrado' : r.ok ? 'Preenchido' : 'Por preencher';
   st.setAttribute('role', 'img'); st.setAttribute('aria-label', label); st.title = label;
   c[0].replaceChildren(st);
   if (has(c[6])) {

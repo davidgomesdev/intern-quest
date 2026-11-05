@@ -3,6 +3,7 @@
 import re
 import subprocess
 import sys
+from pathlib import Path
 from urllib.parse import urlsplit
 
 ESC = r'(?:[^<>&\n]|&(?:amp|lt|gt|quot|#39);)'
@@ -17,8 +18,12 @@ TEXT = re.compile(ESC + '+')
 URL = re.compile(r'https?://[^\s<>\\]+')
 EMAIL = re.compile(r'[^\s@<>&]+@[^\s@<>&.]+(?:\.[^\s@<>&.]+)+')
 PHONE = re.compile(r'\+\d{1,3}(?: ?\d)+')
-NAMES = ['Status', 'Nº', 'Nome', 'Cidade', 'Distrito', 'Morada', 'Áreas',
+NAMES = ['Status', 'Nº', 'Nome', 'Local', 'Distrito', 'Morada', 'Áreas',
          'Adicional', 'Website', 'E-mail', 'Telefone']
+_LK = Path(__file__).resolve().parent.parent / 'lookup'
+# distrito -> its allowed Local names (municípios, plus Lisboa's freguesias); '#' lines are comments
+LOOKUP = {f.stem: {l for l in f.read_text(encoding='utf-8').splitlines() if l and l[0] != '#'}
+          for f in _LK.glob('*.txt') if f.stem != 'distritos'}
 
 
 def _url_ok(v):
@@ -78,6 +83,12 @@ def check_row(line):
                 errs.append(f'{NAMES[i]}: must be empty on a ⬜ row')
         elif not _filled_ok(i, v):
             errs.append(f'{NAMES[i]}: invalid value {v!r} on a ✅ row')
+    if status == '✅' and not errs:
+        loc, dis = cells[3], cells[4]
+        if dis != DESC and dis not in LOOKUP:
+            errs.append(f'Distrito: {dis!r} is not in lookup/distritos.txt')
+        elif loc != IND and loc not in LOOKUP.get(dis, ()):
+            errs.append(f'Local: {loc!r} is not in lookup/{dis}.txt' if dis != DESC else 'Local: needs a known Distrito')
     return errs
 
 

@@ -425,55 +425,61 @@ def test_page():
         fixture = f.read().rstrip("\n").split("\n")
     with tempfile.TemporaryDirectory() as tmp:
         small = Page(chrome, tmp, fixture).dump
+        ALL = "estado=todos&vazias=1&"
+        D3 = "3 de 5 entidades, 3 com dados"
         for h, want, act in [
-                ("", "5 de 5 entidades, 4 com dados", ""), ("a=clinica", "2 de 5 entidades, 2 com dados", "(1 ativo)"),
-                ("a=clinica,neuropsicologia", "3 de 5 entidades, 3 com dados", "(2 ativos)"),
-                ("a=", "5 de 5 entidades, 4 com dados", ""),
+                ("", D3, ""), ("a=clinica", "2 de 5 entidades, 2 com dados", "(1 ativo)"),
+                ("a=clinica,neuropsicologia", D3, "(2 ativos)"),
+                ("a=", D3, ""),
                 ("c=Lisboa", "1 de 5 entidades, 1 com dados", "(1 ativo)"),
                 ("nome=agata", "1 de 5 entidades, 1 com dados", "(1 ativo)"),
                 ("nome=%C3%81GATA", "1 de 5 entidades, 1 com dados", "(1 ativo)"),
-                ("nome=epsilon", "1 de 5 entidades, 1 com dados", "(1 ativo)"),
+                ("nome=epsilon", "0 de 5 entidades, 0 com dados", "(1 ativo)"),
+                ("nome=epsilon&vazias=1", "1 de 5 entidades, 1 com dados", "(2 ativos)"),
                 ("c=Porto", "1 de 5 entidades, 1 com dados", "(1 ativo)"),
-                ("c=porto", "5 de 5 entidades, 4 com dados", ""),
+                ("c=porto", D3, ""),
                 ("d=Lisboa", "2 de 5 entidades, 2 com dados", "(1 ativo)"),
-                ("d=desconhecido", "1 de 5 entidades, 1 com dados", "(1 ativo)"),
+                ("d=desconhecido", "0 de 5 entidades, 0 com dados", "(1 ativo)"),
+                ("d=desconhecido&vazias=1", "1 de 5 entidades, 1 com dados", "(2 ativos)"),
                 ("estado=todo", "1 de 5 entidades, 0 com dados", "(1 ativo)"),
-                ("estado=ok", "4 de 5 entidades, 4 com dados", "(1 ativo)"),
-                ("rem=1", "6 de 6 entidades, 4 com dados", "(1 ativo)"),
+                ("estado=ok", D3, ""),
+                ("estado=todos", "4 de 5 entidades, 3 com dados", "(1 ativo)"),
+                ("vazias=1", "4 de 5 entidades, 4 com dados", "(1 ativo)"),
+                ("estado=todos&vazias=1", "5 de 5 entidades, 4 com dados", "(2 ativos)"),
                 ("nome=zzz", "0 de 5 entidades, 0 com dados", "(1 ativo)"),
-                ("p=999&a=bogus&ord=zzz", "5 de 5 entidades, 4 com dados", ""),
-                ("ord=morada", "5 de 5 entidades, 4 com dados", ""),
-                ("ord=__proto__", "5 de 5 entidades, 4 com dados", ""),
-                ("ord=constructor", "5 de 5 entidades, 4 com dados", ""),
-                ("ord=toString", "5 de 5 entidades, 4 com dados", ""),
-                ("a=constructor", "5 de 5 entidades, 4 com dados", ""),
-                ("a=__proto__,toString", "5 de 5 entidades, 4 com dados", "")]:
+                ("p=999&a=bogus&ord=zzz", D3, ""),
+                ("ord=morada", D3, ""),
+                ("ord=__proto__", D3, ""),
+                ("ord=constructor", D3, ""),
+                ("ord=toString", D3, ""),
+                ("a=constructor", D3, ""),
+                ("a=__proto__,toString", D3, "")]:
             dom = small(h)
             assert _count(dom) == want, (h, _count(dom), want)
             assert _ativos(dom) == act, (h, _ativos(dom))
         for h in ["ord=__proto__", "ord=constructor", "a=constructor"]:
             dom = small(h)
-            assert _ids(dom) == ["e0001", "e0002", "e0003", "e0004", "e0005"], h
+            assert _ids(dom) == ["e0001", "e0003", "e0004"], h
             assert 'id="rows" role="rowgroup" class="ready"' in dom or 'class="ready"' in dom, h
 
         dom = small("nome=zzz")
         assert _ids(dom) == [] and not re.search(r'<div id="vazio"[^>]*hidden', dom)
         assert _disabled(dom) == 4 and _pager(dom) == "Página 1 de 1"
         assert _disabled(small()) == 4 and _pager(small()) == "Página 1 de 1"
-        assert _ids(small("ord=morada")) == ["e0001", "e0002", "e0003", "e0004", "e0005"]
+        assert _ids(small("ord=morada")) == ["e0001", "e0003", "e0004"]
 
         names = {re.match(r'<tr id="(e\d+)"', l).group(1): _fold(re.findall(r"<td>(.*?)</td>", l)[2])
                  for l in fixture if "data-removed" not in l}
         last = max(names, key=names.get)
-        assert last == "e0005" and _ids(small("ord=nome&dir=desc"))[0] == last
-        dom = small("ord=nome&dir=desc")
+        assert last == "e0005" and _ids(small(ALL + "ord=nome&dir=desc"))[0] == last
+        dom = small(ALL + "ord=nome&dir=desc")
         assert 'aria-sort="descending"' in _sort(dom, "nome") and "aria-sort" not in _sort(dom, "n")
         assert 'aria-sort="ascending"' in _sort(small(), "n")
-        assert _ids(small("ord=local&dir=asc")) == ["e0001", "e0003", "e0004", "e0002", "e0005"]
-        assert _ids(small("ord=local&dir=desc")) == ["e0004", "e0003", "e0001", "e0002", "e0005"]
-        assert _ids(small("ord=distrito&dir=desc")) == ["e0004", "e0001", "e0003", "e0002", "e0005"]
+        assert _ids(small(ALL + "ord=local&dir=asc")) == ["e0001", "e0003", "e0004", "e0002", "e0005"]
+        assert _ids(small(ALL + "ord=local&dir=desc")) == ["e0004", "e0003", "e0001", "e0002", "e0005"]
+        assert _ids(small(ALL + "ord=distrito&dir=desc")) == ["e0004", "e0001", "e0003", "e0002", "e0005"]
 
-        dom = small()
+        dom = small(ALL)
         assert '<a href="tel:+351212345678">212 345 678</a>' in dom
         assert '<a href="tel:+442079460958">+44 20 7946 0958</a>' in dom
         assert 'href="https://www.alfa.example/" target="_blank" rel="noopener"' in dom
@@ -482,10 +488,10 @@ def test_page():
         assert re.search(r'class="area"><span aria-hidden="true">🩺</span>Clínica e da Saúde</span>'
                          r'<span class="area"><span aria-hidden="true">🎓</span>Educação</span>', dom)
         assert "<i>indisponível</i>" in dom
-        dom = small("rem=1")
-        assert "Café &amp; Co" in dom and "&amp;amp;" not in dom and "removida da OPP" in dom
+        assert "Café" not in small(ALL)
 
-        big = Page(chrome, tmp, _gen_rows()).dump
+        _big = Page(chrome, tmp, _gen_rows()).dump
+        big = lambda h="": _big(ALL + h)
         dom = big()
         assert _count(dom) == "120 de 120 entidades, 60 com dados" and _pager(dom) == "Página 1 de 3"
         assert len(_ids(dom)) == 50 and _ids(dom)[0] == "e0001" and _disabled(dom) == 2
@@ -506,7 +512,7 @@ def test_page():
         bad_url = fixture[0].replace("https://www.alfa.example", "https://a:99999")
         assert bad_url != fixture[0]
         dom = Page(chrome, tmp, [bad_url] + fixture[1:]).dump()
-        assert _count(dom) == "5 de 5 entidades, 4 com dados" and 'class="ready"' in dom
+        assert _count(dom) == D3 and 'class="ready"' in dom
         assert "https://a:99999" in dom and 'href="https://a:99999' not in dom
 
         runtime = os.path.join(tmp, "runtime.js")

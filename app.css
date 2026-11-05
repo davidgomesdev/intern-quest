@@ -14,8 +14,6 @@
   --rule: #f08a24;     /* bright orange: decorative only, never text */
   --chip: #fff0e1;     /* área pills */
   --chip-fg: #7a3300;
-  --warn: #a3261b;     /* "removida da OPP" */
-  --warn-bg: #fdeeec;
 
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Helvetica Neue", Arial, sans-serif;
   --round: ui-rounded, "SF Pro Rounded", "Arial Rounded MT Bold", "Nunito", "Varela Round", system-ui, sans-serif;
@@ -27,7 +25,6 @@
     --bg: #161618; --card: #212124; --soft: #2e2219;
     --fg: #ecebe8; --muted: #a8a39d; --line: #34322f; --edge: #7a746e;
     --accent: #ffa95e; --rule: #e07a1f; --chip: #3a2818; --chip-fg: #ffd0a3;
-    --warn: #ff9a8f; --warn-bg: #3b1c19;
   }
 }
 
@@ -167,7 +164,6 @@ tr[data-removed] td:nth-child(3) { color: var(--muted); }
 .st { line-height: 1; }
 .areas { display: flex; flex-wrap: wrap; gap: 6px; }
 .area { display: inline-flex; gap: 5px; align-items: baseline; padding: 2px 10px; border-radius: var(--r-pill); background: var(--chip); color: var(--chip-fg); font-size: 13px; font-weight: 500; }
-.removida { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: var(--r-pill); color: var(--warn); background: var(--warn-bg); font-size: 12px; font-weight: 600; vertical-align: 2px; }
 
 footer { padding: var(--s4) 0 var(--s6); font-size: 13px; color: var(--muted); }
 

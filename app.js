@@ -17,7 +17,7 @@ const form = $('#filters'), tbody = $('#rows');
 let ROWS = [], TOTAL = 0, S;
 
 const norm = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();
-const defaults = () => ({ nome: '', c: '', d: '', a: [], estado: 'todos', rem: false, ord: 'n', dir: 'asc', p: 1 });
+const defaults = () => ({ nome: '', c: '', d: '', a: [], estado: 'ok', vazias: false, ord: 'n', dir: 'asc', p: 1 });
 
 function parse() {
   ROWS = Array.from(tbody.rows, el => {
@@ -25,6 +25,7 @@ function parse() {
     const val = i => (miss(c[i]) ? null : c[i].textContent);
     const areas = miss(c[6]) ? (c[6].firstElementChild ? ['desconhecido'] : []) : c[6].textContent.split(' ');
     return { el, n: +c[1].textContent, ok: c[0].textContent === '✅', removed: 'removed' in el.dataset,
+      empty: Array.from(c).slice(3, 11).every(miss),
       nome: c[2].textContent, local: val(3), distrito: val(4), dUnk: !!c[4].firstElementChild, areas,
       kNome: norm(c[2].textContent), done: false };
   });
@@ -40,8 +41,8 @@ function buildOptions() {
 function readState() {
   const q = new URLSearchParams(location.hash.slice(1)), g = k => q.get(k) || '';
   S = { ...defaults(), nome: g('nome'), c: g('c'), d: g('d'),
-    a: g('a').split(',').filter(k => Object.hasOwn(AREAS, k)), rem: g('rem') === '1',
-    estado: ['ok', 'todo'].includes(g('estado')) ? g('estado') : 'todos',
+    a: g('a').split(',').filter(k => Object.hasOwn(AREAS, k)), vazias: g('vazias') === '1',
+    estado: ['todos', 'todo'].includes(g('estado')) ? g('estado') : 'ok',
     ord: Object.hasOwn(KEY, g('ord')) ? g('ord') : 'n', dir: g('dir') === 'desc' ? 'desc' : 'asc', p: parseInt(g('p'), 10) || 1 };
   toForm();
   S.c = form.elements.c.value; S.d = form.elements.d.value; // drop values that are not in the lists
@@ -50,8 +51,8 @@ function readState() {
 function writeState() {
   const D = defaults(), q = new URLSearchParams();
   for (const k in D) {
-    const v = k === 'a' ? S.a.join(',') : k === 'rem' ? (S.rem ? '1' : '') : S[k];
-    if (v !== (k === 'a' || k === 'rem' ? '' : D[k])) q.set(k, v);
+    const v = k === 'a' ? S.a.join(',') : k === 'vazias' ? (S.vazias ? '1' : '') : S[k];
+    if (v !== (k === 'a' || k === 'vazias' ? '' : D[k])) q.set(k, v);
   }
   const h = q.toString().replace(/%2C/g, ',');
   history.replaceState(null, '', location.pathname + location.search + (h && '#' + h));
@@ -59,13 +60,13 @@ function writeState() {
 
 function toForm() {
   const f = form.elements;
-  f.nome.value = S.nome; f.c.value = S.c; f.d.value = S.d; f.estado.value = S.estado; f.rem.checked = S.rem;
+  f.nome.value = S.nome; f.c.value = S.c; f.d.value = S.d; f.estado.value = S.estado; f.vazias.checked = S.vazias;
   form.querySelectorAll('[name=a]').forEach(i => { i.checked = S.a.includes(i.value); });
 }
 
 function fromForm() {
   const f = form.elements;
-  Object.assign(S, { nome: f.nome.value, c: f.c.value, d: f.d.value, estado: f.estado.value, rem: f.rem.checked,
+  Object.assign(S, { nome: f.nome.value, c: f.c.value, d: f.d.value, estado: f.estado.value, vazias: f.vazias.checked,
     a: Array.from(form.querySelectorAll('[name=a]:checked'), i => i.value), p: 1 });
 }
 
@@ -74,7 +75,7 @@ function matches(r, q) {
     && (!S.d || (S.d === 'desconhecido' ? r.dUnk : r.distrito === S.d))
     && (!S.a.length || S.a.some(a => r.areas.includes(a)))
     && (S.estado === 'todos' || r.ok === (S.estado === 'ok'))
-    && (S.rem || !r.removed);
+    && !r.removed && (S.vazias || !(r.ok && r.empty));
 }
 
 function sortRows(list) {
@@ -131,7 +132,6 @@ function enhance(r) {
   if (has(c[8])) site(c[8]);
   if (has(c[9])) c[9].replaceChildren(link('mailto:' + c[9].textContent, c[9].textContent));
   if (has(c[10])) { const t = c[10].textContent; c[10].replaceChildren(link('tel:' + t.replace(/ /g, ''), t.replace(/^\+351 /, ''))); }
-  if (r.removed) c[2].append(' ', el('span', 'removida', 'removida da OPP'));
   r.done = true;
 }
 
@@ -142,14 +142,14 @@ function render(slice) {
 }
 
 function renderCount(list, last) {
-  const total = S.rem ? ROWS.length : TOTAL, filled = list.filter(r => r.ok).length;
+  const total = TOTAL, filled = list.filter(r => r.ok).length;
   $('#count').replaceChildren(el('strong', '', list.length), ` de ${total} entidades, ${filled} com dados`);
   document.querySelectorAll('.pager').forEach(p => {
     p.querySelector('span').textContent = `Página ${S.p} de ${last}`;
     p.querySelector('[data-p=prev]').disabled = S.p <= 1;
     p.querySelector('[data-p=next]').disabled = S.p >= last;
   });
-  const active = [S.nome, S.c, S.d].filter(Boolean).length + S.a.length + (S.estado !== 'todos') + S.rem;
+  const active = [S.nome, S.c, S.d].filter(Boolean).length + S.a.length + (S.estado !== 'ok') + S.vazias;
   $('#ativos').textContent = active ? `(${active} ${active > 1 ? 'ativos' : 'ativo'})` : '';
   $('#vazio').hidden = list.length > 0;
   $('.tabela').hidden = list.length === 0;

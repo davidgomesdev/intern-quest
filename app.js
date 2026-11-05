@@ -17,7 +17,8 @@ const form = $('#filters'), tbody = $('#rows');
 let ROWS = [], TOTAL = 0, S;
 
 const norm = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();
-const defaults = () => ({ nome: '', c: '', d: '', a: [], estado: 'ok', vazias: false, ord: 'n', dir: 'asc', p: 1 });
+const defaults = () => ({ nome: '', c: '', d: '', a: [], estado: 'ok', vazias: false, contacto: false, ord: 'n', dir: 'asc', p: 1 });
+const FLAGS = ['vazias', 'contacto']; // on/off filters: stored as "1" in the hash, absent when off
 
 function parse() {
   ROWS = Array.from(tbody.rows, el => {
@@ -27,7 +28,7 @@ function parse() {
     return { el, n: +c[1].textContent, ok: c[0].textContent === '✅', removed: 'removed' in el.dataset,
       empty: Array.from(c).slice(3, 11).every(miss),
       nome: c[2].textContent, local: val(3), distrito: val(4), dUnk: !!c[4].firstElementChild, areas,
-      kNome: norm(c[2].textContent), done: false };
+      kNome: norm(c[2].textContent), contacto: !!(val(8) || val(9)), done: false };
   });
   TOTAL = ROWS.filter(r => !r.removed).length;
 }
@@ -41,7 +42,7 @@ function buildOptions() {
 function readState() {
   const q = new URLSearchParams(location.hash.slice(1)), g = k => q.get(k) || '';
   S = { ...defaults(), nome: g('nome'), c: g('c'), d: g('d'),
-    a: g('a').split(',').filter(k => Object.hasOwn(AREAS, k)), vazias: g('vazias') === '1',
+    a: g('a').split(',').filter(k => Object.hasOwn(AREAS, k)), vazias: g('vazias') === '1', contacto: g('contacto') === '1',
     estado: ['todos', 'todo'].includes(g('estado')) ? g('estado') : 'ok',
     ord: Object.hasOwn(KEY, g('ord')) ? g('ord') : 'n', dir: g('dir') === 'desc' ? 'desc' : 'asc', p: parseInt(g('p'), 10) || 1 };
   toForm();
@@ -51,8 +52,8 @@ function readState() {
 function writeState() {
   const D = defaults(), q = new URLSearchParams();
   for (const k in D) {
-    const v = k === 'a' ? S.a.join(',') : k === 'vazias' ? (S.vazias ? '1' : '') : S[k];
-    if (v !== (k === 'a' || k === 'vazias' ? '' : D[k])) q.set(k, v);
+    const v = k === 'a' ? S.a.join(',') : FLAGS.includes(k) ? (S[k] ? '1' : '') : S[k];
+    if (v !== (k === 'a' || FLAGS.includes(k) ? '' : D[k])) q.set(k, v);
   }
   const h = q.toString().replace(/%2C/g, ',');
   history.replaceState(null, '', location.pathname + location.search + (h && '#' + h));
@@ -60,13 +61,13 @@ function writeState() {
 
 function toForm() {
   const f = form.elements;
-  f.nome.value = S.nome; f.c.value = S.c; f.d.value = S.d; f.estado.value = S.estado; f.vazias.checked = S.vazias;
+  f.nome.value = S.nome; f.c.value = S.c; f.d.value = S.d; f.estado.value = S.estado; f.vazias.checked = S.vazias; f.contacto.checked = S.contacto;
   form.querySelectorAll('[name=a]').forEach(i => { i.checked = S.a.includes(i.value); });
 }
 
 function fromForm() {
   const f = form.elements;
-  Object.assign(S, { nome: f.nome.value, c: f.c.value, d: f.d.value, estado: f.estado.value, vazias: f.vazias.checked,
+  Object.assign(S, { nome: f.nome.value, c: f.c.value, d: f.d.value, estado: f.estado.value, vazias: f.vazias.checked, contacto: f.contacto.checked,
     a: Array.from(form.querySelectorAll('[name=a]:checked'), i => i.value), p: 1 });
 }
 
@@ -75,7 +76,7 @@ function matches(r, q) {
     && (!S.d || (S.d === 'desconhecido' ? r.dUnk : r.distrito === S.d))
     && (!S.a.length || S.a.some(a => r.areas.includes(a)))
     && (S.estado === 'todos' || r.ok === (S.estado === 'ok'))
-    && !r.removed && (S.vazias || !(r.ok && r.empty));
+    && !r.removed && (S.vazias || !(r.ok && r.empty)) && (!S.contacto || r.contacto);
 }
 
 function sortRows(list) {
@@ -149,7 +150,7 @@ function renderCount(list, last) {
     p.querySelector('[data-p=prev]').disabled = S.p <= 1;
     p.querySelector('[data-p=next]').disabled = S.p >= last;
   });
-  const active = [S.nome, S.c, S.d].filter(Boolean).length + S.a.length + (S.estado !== 'ok') + S.vazias;
+  const active = [S.nome, S.c, S.d].filter(Boolean).length + S.a.length + (S.estado !== 'ok') + S.vazias + S.contacto;
   $('#ativos').textContent = active ? `(${active} ${active > 1 ? 'ativos' : 'ativo'})` : '';
   $('#vazio').hidden = list.length > 0;
   $('.tabela').hidden = list.length === 0;

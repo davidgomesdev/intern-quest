@@ -7,17 +7,17 @@ description: Use when given one OPP protocol number (e.g. 0001) and an output di
 
 Input: a protocol number, the repo path, and an output directory `OUT`. Output: one JSON file in `OUT`. You never run git or `gh`, never edit `index.html`, never write files anywhere else. The orchestrator (`fill-batch`) validates the row, commits it and opens the PR. The row format is the contract in `SPEC.md` §4 and §5; this skill is the procedure.
 
-Below, `ID` is the number zero-padded to at least 4 digits (`1` → `0001`, `10000` stays `10000`).
+Below, `ID` is the number zero-padded to at least 4 digits (`1` → `0001`, `10000` stays `10000`). The row id in `index.html` is `e` + `ID`: entity `0340` is `<tr id="e0340"`, never `id="0340"`.
 
 ## 1. Read the row (the name comes from here)
 
-Read-only, from the repo path you were given:
+Read-only, from the repo path you were given (entity `0340` → `grep '^<tr id="e0340"[ >]' REPO/index.html`):
 
 ```bash
 grep '^<tr id="eID"[ >]' REPO/index.html
 ```
 
-- No output: the id does not exist or is flagged `data-removed`. Stop, report it.
+- No output: before concluding the row is missing, check you kept the `e` prefix and the full zero-padded number, and run it once more. Still nothing: the id does not exist or is flagged `data-removed`. Stop, report it.
 - Second cell is `✅`: already filled. Stop, report it. Exception, a refill: Website and Telefone are both `<i>indisponível</i>`. Then go on, and treat the existing cells as leads, not facts: keep a value only if a page you open confirms it.
 - Otherwise the third `<td>` is the Nome. Copy it exactly. Never change it.
 

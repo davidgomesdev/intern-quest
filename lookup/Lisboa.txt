@@ -1,0 +1,42 @@
+# Municípios
+Alenquer
+Amadora
+Arruda dos Vinhos
+Azambuja
+Cadaval
+Cascais
+Lisboa
+Loures
+Lourinhã
+Mafra
+Odivelas
+Oeiras
+Sintra
+Sobral de Monte Agraço
+Torres Vedras
+Vila Franca de Xira
+# Freguesias do município de Lisboa (só se a morada for na cidade de Lisboa e a freguesia for conhecida)
+Ajuda
+Alcântara
+Alvalade
+Areeiro
+Arroios
+Avenidas Novas
+Beato
+Belém
+Benfica
+Campo de Ourique
+Campolide
+Carnide
+Estrela
+Lumiar
+Marvila
+Misericórdia
+Olivais
+Parque das Nações
+Penha de França
+Santa Clara
+Santa Maria Maior
+Santo António
+São Domingos de Benfica
+São Vicente

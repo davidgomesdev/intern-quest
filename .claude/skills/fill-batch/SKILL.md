@@ -80,7 +80,13 @@ git push -u origin feat/fill-batch-<stamp>
 gh pr create --title "feat(data): fill N entities" --body "<body>"
 ```
 
-Body: one line per committed entity, `- eID (NOME): URL1, URL2` from the `sources` array of its JSON (`no sources found` if empty). GitHub calls can time out: retry a failed `push` or `gh` up to 3 times, waiting 10, 30, 60 seconds. If it still fails, stop and report the exact error; the worktree and branch stay for a human.
+Body: a `## Entities` list with one line per entity you dispatched in step 3, written after every subagent has finished and step 4 is done:
+
+- committed: `- eID (NOME): ok, URL1, URL2` (URLs from the `sources` array of its JSON; `no sources found` if empty)
+- failed at any stage (subagent `FAILED`, missing JSON, `apply_row.py` or `check.py` error): `- eID (NOME): FAILED: <reason>`
+
+Nothing else per entity: no research notes, no skipped ids (those only go in the final report). Use `—` for NOME when the subagent never found a row.
+ GitHub calls can time out: retry a failed `push` or `gh` up to 3 times, waiting 10, 30, 60 seconds. If it still fails, stop and report the exact error; the worktree and branch stay for a human.
 
 ## 6. Wait for CI, merge
 

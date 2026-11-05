@@ -5,7 +5,7 @@ description: Use when given a list of OPP protocol numbers (a count N, or nothin
 
 # Fill a batch of entities
 
-Two phases. Subagents (running `fill-entity`) only research and write `OUT/eID.row` and `OUT/eID.sources`; they never touch git, `gh` or `index.html`. You, the orchestrator, are the only one who edits `index.html`, commits, pushes and talks to GitHub: one branch, one commit per entity, one PR. Nothing writes the same file, so there is nothing to race on.
+Two phases. Subagents (running `fill-entity`) only research and write `OUT/eID.json`; they never touch git, `gh` or `index.html`. You, the orchestrator, are the only one who edits `index.html`, commits, pushes and talks to GitHub: one branch, one commit per entity, one PR. Nothing writes the same file, so there is nothing to race on.
 
 ## 1. Build the id list
 
@@ -58,19 +58,10 @@ git worktree add -b feat/fill-batch-<stamp> ../intern-quest-wt-fill-<stamp> orig
 cd ../intern-quest-wt-fill-<stamp>
 ```
 
-For each id whose subagent reported `ok` and whose `OUT/eID.row` exists, in ascending order:
+For each id whose subagent reported `ok` and whose `OUT/eID.json` exists, in ascending order:
 
 ```bash
-python3 - eID "$OUT" <<'EOF'
-import sys, pathlib
-i, out = sys.argv[1], sys.argv[2]; p = pathlib.Path('index.html')
-new = pathlib.Path(f'{out}/{i}.row').read_text().strip()
-lines = p.read_text().split('\n')
-hits = [n for n, l in enumerate(lines) if l.startswith(f'<tr id="{i}">')]
-assert len(hits) == 1 and new.startswith(f'<tr id="{i}">') and '\n' not in new
-lines[hits[0]] = new
-p.write_text('\n'.join(lines))
-EOF
+scripts/apply_row.py ID "$OUT/eID.json"   # builds the row from the JSON
 git diff --numstat          # must print exactly: 1  1  index.html
 scripts/check.py index.html
 git add index.html
@@ -78,7 +69,7 @@ git commit -m "feat(data): fill eID"
 scripts/check.py --diff HEAD~1      # this commit only
 ```
 
-If any step fails, run `git reset --hard HEAD` (drops that entity's half-done change, keeps earlier commits), record `FAILED: <reason>` for the id, and go on to the next. Do not hand-edit a bad row. No co-author trailers. Never use `--no-verify` or skip signing. If a hook or signing fails, stop the whole batch and report the exact error.
+If any step fails, run `git reset --hard HEAD` (drops that entity's half-done change, keeps earlier commits), record `FAILED: <reason>` for the id, and go on to the next. Do not hand-edit a bad row; `apply_row.py` is the only thing that writes one. No co-author trailers. Never use `--no-verify` or skip signing. If a hook or signing fails, stop the whole batch and report the exact error.
 
 If no commit was made, remove the worktree and report; do not open a PR.
 
@@ -89,7 +80,7 @@ git push -u origin feat/fill-batch-<stamp>
 gh pr create --title "feat(data): fill N entities" --body "<body>"
 ```
 
-Body: one line per committed entity, `- eID (NOME): URL1, URL2` from its `.sources` file (`no sources found` if empty). GitHub calls can time out: retry a failed `push` or `gh` up to 3 times, waiting 10, 30, 60 seconds. If it still fails, stop and report the exact error; the worktree and branch stay for a human.
+Body: one line per committed entity, `- eID (NOME): URL1, URL2` from the `sources` array of its JSON (`no sources found` if empty). GitHub calls can time out: retry a failed `push` or `gh` up to 3 times, waiting 10, 30, 60 seconds. If it still fails, stop and report the exact error; the worktree and branch stay for a human.
 
 ## 6. Wait for CI, merge
 

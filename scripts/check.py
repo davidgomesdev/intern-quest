@@ -10,7 +10,7 @@ IND = '<i>indisponível</i>'
 DESC = '<i>desconhecido</i>'
 SLUGS = {'clinica', 'neuropsicologia', 'psicoterapia', 'educacao',
          'organizacoes', 'justica', 'comunitaria', 'desporto'}
-ROW = re.compile(r'^<tr id="e(\d{4,})"( data-removed="1")?>((?:<td>(?:' + ESC
+ROW = re.compile(r'^<tr id="e(\d{4,})"((?: data-removed="1"| data-src="[^"<>]*")*)>((?:<td>(?:' + ESC
                  + r'|<i>(?:indisponível|desconhecido)</i>)*</td>){11})</tr>$')
 CELLS = re.compile(r'<td>(.*?)</td>')
 TEXT = re.compile(ESC + '+')
@@ -54,14 +54,19 @@ def _filled_ok(i, v):
 def check_row(line):
     m = ROW.match(line)
     if not m:
-        return ['line does not match row shape (id, optional data-removed, 11 cells)']
+        return ['line does not match row shape (id, optional data-removed/data-src, 11 cells)']
     rid, cells = m.group(1), CELLS.findall(m.group(3))
+    src = SRC.search(m.group(2))
+    if src and not (src.group(1) and all(map(_url_ok, src.group(1).split(' ')))):
+        return ['data-src: must be space-separated http(s) URLs']
     if len(cells) != 11:
         return [f'expected 11 cells, got {len(cells)}']
     errs = []
     status = cells[0]
     if status not in ('⬜', '✅'):
         return [f'Status: unknown value {status!r}']
+    if src and status == '⬜':
+        errs.append('data-src: not allowed on a ⬜ row')
     if cells[1] != rid:
         errs.append(f'Nº: {cells[1]!r} does not match id {rid}')
     if not TEXT.fullmatch(cells[2]):
@@ -95,6 +100,11 @@ def check_file(path):
 
 ROWID = re.compile(r'^<tr id="e(\d+)"')
 FLAG = ' data-removed="1"'
+SRC = re.compile(r' data-src="([^"<>]*)"')
+
+
+def _bare(l):
+    return SRC.sub('', l.replace(FLAG, ''))
 
 
 def _rid(line):
@@ -123,7 +133,7 @@ def check_diff(diff_text, changed_files, branch):
         return errs
     pairs = list(zip(rm, add))
     fills = (len(rm) == len(add) and len({_rid(l) for l in rm}) == len(rm)
-             and all(_rid(a) == _rid(b) and a.replace(FLAG, '') != b.replace(FLAG, '')
+             and all(_rid(a) == _rid(b) and _bare(a) != _bare(b)
                      for a, b in pairs))
     if fills:
         errs += [f'non-row line of index.html changed: {l[:60]}' for l in other]
@@ -147,7 +157,7 @@ def _entity(old, new, branch):
         errs.append(f'e{rid}: new row must be ✅')
     if oc[2] != nc[2]:
         errs.append(f'e{rid}: Nome changed')
-    if m.group(2) != n.group(2):
+    if (FLAG in m.group(2)) != (FLAG in n.group(2)):
         errs.append(f'e{rid}: data-removed changed')
     b = re.search(r'e(\d{4,})', branch or '')
     if b and b.group(1) != rid:
@@ -161,7 +171,7 @@ def _sync(rm, add):
     new = {_rid(l): l for l in add}
     for rid, l in new.items():
         if rid in old:
-            if l.replace(FLAG, '') != old[rid].replace(FLAG, '') or l == old[rid]:
+            if _bare(l) != _bare(old[rid]) or l == old[rid]:
                 errs.append(f'e{rid}: existing row changed beyond data-removed')
         else:
             if not l.startswith(f'<tr id="e{rid}"><td>⬜</td>'):

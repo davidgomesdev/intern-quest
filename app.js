@@ -114,7 +114,14 @@ function enhance(r) {
   for (const td of c) td.setAttribute('role', 'cell');
   const st = el('span', r.ok ? 'st' : 'st st-todo', c[0].textContent), label = r.ok ? 'Preenchido' : 'Por preencher';
   st.setAttribute('role', 'img'); st.setAttribute('aria-label', label); st.title = label;
-  c[0].replaceChildren(st);
+  const src = r.el.dataset.src;
+  if (src) { // sources popup: <details> gives click/tap/keyboard for free
+    st.title = 'Preenchido · ver fontes';
+    const d = el('details', 'src'), sm = el('summary'), box = el('div', 'src-box');
+    sm.append(st, el('span', 'vh', ' Fontes'));
+    box.append(el('strong', null, 'Fontes'), ...src.split(' ').map(u => link(u, u.replace(/^https?:\/\/(www\.)?/, ''), true)));
+    d.append(sm, box); c[0].replaceChildren(d);
+  } else c[0].replaceChildren(st);
   if (has(c[6])) {
     const w = el('span', 'areas');
     for (const k of r.areas) {
@@ -191,3 +198,4 @@ try {
   document.documentElement.classList.remove('js'); // show the plain table rather than a blank page
   throw e;
 }
+document.addEventListener('click', e => document.querySelectorAll('details.src[open]').forEach(d => { if (!d.contains(e.target)) d.open = false; }));

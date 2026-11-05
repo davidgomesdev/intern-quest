@@ -199,3 +199,11 @@ footer { padding: var(--s4) 0 var(--s6); font-size: 13px; color: var(--muted); }
 
 /* columns that are not sortable: kept for screen readers, hidden from the sort bar */
 th.nosort{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* ---------- Sources popup ---------- */
+.src { position: relative; }
+.src summary { list-style: none; cursor: pointer; }
+.src summary::-webkit-details-marker { display: none; }
+.src-box { position: absolute; z-index: 3; left: 0; top: 100%; width: min(320px, calc(100vw - 48px)); display: grid; gap: var(--s2);
+  padding: var(--s3); background: var(--card); border: 1px solid var(--edge); border-radius: var(--r-field);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.18); font-size: 13.5px; line-height: 1.4; font-weight: 400; overflow-wrap: anywhere; }

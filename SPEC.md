@@ -86,7 +86,8 @@ Rules:
 - Text is HTML-escaped (`&amp;`, `&lt;`). Emails and URLs stored as plain text; JS makes them links at render time. Telefone becomes `<a href="tel:+351212345678">212 345 678</a>`: the `href` is the stored number without spaces, the label drops a leading `+351 ` (non-Portuguese numbers show in full).
 - Ids are the protocol number zero-padded to **at least** 4 digits (`e0001`, `e9999`, `e10000`); never truncated. Row regex uses `e[0-9]{4,}`.
 - Áreas cell: space-separated slugs (not `;`). The UI turns them into chips and a multi-select filter, so the raw token form is never what the user sees **[CALL]**. Chosen because it is the cheapest form to edit and to match with `grep -w`.
-- Subagent read: `grep '^<tr id="e0001">' index.html`.
+- Sources: a ✅ row carries `data-src="URL URL…"` on the `<tr>` (space-separated http(s) URLs, `&` escaped), written by `scripts/apply_row.py` from the research JSON's `sources`. ⬜ rows never have it. The page shows it as a popup on the ✅ icon.
+- Subagent read: `grep '^<tr id="e0001"[ >]' index.html`.
 - Subagent write: replace that one line; touch no other line.
 - Orchestrator: `grep -m1 '^<tr id="e[0-9]*"><td>⬜' index.html` (next work), `grep -c '^<tr id="e[0-9]*"><td>⬜' index.html` (remaining). Rows flagged `data-removed="1"` have an attribute after the id, so these patterns skip them.
 

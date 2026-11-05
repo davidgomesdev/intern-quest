@@ -25,7 +25,10 @@ def build(old, d):
     new = ['✅', cells[1], cells[2], val('cidade'), val('distrito', DESC), val('morada'),
            areas, val('adicional'), val('website'), val('email'), val('telefone')]
     rid = re.match(r'<tr id="(e\d+)"', old).group(1)
-    return f'<tr id="{rid}">' + ''.join(f'<td>{c}</td>' for c in new) + '</tr>'
+    flag = ' data-removed="1"' if ' data-removed="1"' in old[:old.index('>')] else ''
+    urls = [u for u in dict.fromkeys(d.get('sources') or []) if re.fullmatch(r'https?://[^\s<>"\\]+', u)]
+    src = f' data-src="{esc(" ".join(urls))}"' if urls else ''  # ponytail: no sources, no attribute
+    return f'<tr id="{rid}"{flag}{src}>' + ''.join(f'<td>{c}</td>' for c in new) + '</tr>'
 
 
 def main(argv):
@@ -35,7 +38,7 @@ def main(argv):
     rid, data = f'e{argv[1]}', json.loads(pathlib.Path(argv[2]).read_text(encoding='utf-8'))
     p = pathlib.Path(argv[3] if len(argv) == 4 else 'index.html')
     lines = p.read_text(encoding='utf-8').split('\n')
-    hits = [n for n, l in enumerate(lines) if l.startswith(f'<tr id="{rid}">')]
+    hits = [n for n, l in enumerate(lines) if re.match(rf'<tr id="{rid}"[ >]', l)]
     if len(hits) != 1:
         print(f'{rid}: expected exactly one row, found {len(hits)}', file=sys.stderr)
         return 1

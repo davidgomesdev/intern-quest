@@ -81,6 +81,16 @@ def test_check_row_rejects():
         assert check.check_row(line), name
 
 
+def test_check_data_src():
+    ok = row(FILLED_CELLS, attr=' data-src="https://a.pt/x https://b.pt/y?a=1&amp;b=2"')
+    assert check.check_row(ok) == []
+    assert check.check_row(row(FILLED_CELLS, attr=' data-src=""'))
+    assert check.check_row(row(FILLED_CELLS, attr=' data-src="javascript:alert(1)"'))
+    assert check.check_row(row(["⬜", "0001", "N"] + [""] * 8, attr=' data-src="https://a.pt"'))
+    assert check.check_diff(diff((filled(), ok)), ["index.html"], None) == []
+    assert 'data-src="https://a.pt/x?a=1&amp;b=2"' in apply_row.build(EMPTY, {"sources": ["https://a.pt/x?a=1&b=2", "u"]})
+
+
 def test_check_rejects_unusable_urls():
     for bad in ["https://a:99999", "https://[", "https:///x", "http://a\\b"]:
         assert check.check_row(filled(c8=bad)) != [], bad

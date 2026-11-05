@@ -60,8 +60,6 @@ cd ../intern-quest-wt-fill-<stamp>
 
 For each id whose subagent reported `ok` and whose `OUT/eID.json` exists, in ascending order:
 
-If the JSON has a `flags` array, the orchestrator records each flag in the row's Adicional before applying: prefix the joined flags with `Revisar: ` and append them after any existing `adicional` text, separated by `; `. Write this into the JSON's `adicional` field, never into the row by hand. Flags are review notes for a human; they do not stop the commit.
-
 ```bash
 scripts/apply_row.py ID "$OUT/eID.json"   # builds the row from the JSON
 git diff --numstat          # must print exactly: 1  1  index.html

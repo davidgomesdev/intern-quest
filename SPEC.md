@@ -133,11 +133,11 @@ Real `<table>` with `<th scope="col">`, keyboard-operable sort, labels on all fi
 5. One entity per PR. Diff must be exactly one changed line.
 
 ### 7.3 Merge conflicts
-Neighbouring-line PRs can conflict. A CI check (see 7.4) plus rebase resolves them; the orchestrator should dispatch non-adjacent entities in the same batch when possible.
+Neighbouring-line PRs can conflict. A CI check (see 7.4) plus rebase resolves them; a batch is one branch with one commit per entity, applied in order by the orchestrator, so entities in the same batch never conflict.
 
 ### 7.4 CI check on every PR **[CALL]**
 A small script that fails the PR if:
-- more than one line of `index.html` changed, or any line other than the entity's changed;
+- any line of `index.html` other than an entity row changed, or an entity row changed other than by filling it (one PR may fill several entities, one commit each);
 - the line does not match the section 5 shape (11 cells, valid status, valid áreas slugs, or exactly `<i>desconhecido</i>` alone);
 - a ✅ row contains an empty cell;
 - a URL does not start with `http://` or `https://`, an e-mail is not shaped like one, or a phone does not match `+<country code> <digits>`.

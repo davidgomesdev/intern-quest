@@ -37,14 +37,23 @@ Collect, using only what a page states:
 
 | Cell | Value | If not found |
 |---|---|---|
-| Cidade | one concelho | `<i>indisponível</i>` |
-| Distrito | only if the page states it; never infer it from the city | `<i>desconhecido</i>` |
+| Local | one name copied exactly from the Distrito's lookup file (see "Distrito and Local" below) | `<i>indisponível</i>` |
+| Distrito | one name from `REPO/lookup/distritos.txt` | `<i>desconhecido</i>` |
 | Morada | street address as written | `<i>indisponível</i>` |
 | Áreas | space-separated slugs from the list below, no duplicates | `<i>desconhecido</i>` (alone) |
 | Adicional | short free text the slugs do not cover (e.g. "Intervenção precoce") | `<i>indisponível</i>` |
 | Website | starts with `http://` or `https://` | `<i>indisponível</i>` |
 | E-mail | one public contact e-mail | `<i>indisponível</i>` |
 | Telefone | `+351 212 345 678` style: `+`, country code, space, digits and spaces | `<i>indisponível</i>` |
+
+### Distrito and Local
+
+Use the Morada you collected (never the entity's name or memory), and the lists in `REPO/lookup/`:
+
+1. Read `REPO/lookup/distritos.txt` (20 names: the 18 distritos plus Açores and Madeira). Pick the Distrito the Morada is in. Not sure, or no Morada: Distrito `null`, Local `null`.
+2. Read the whole file `REPO/lookup/<Distrito>.txt` (e.g. `lookup/Setúbal.txt`) and pick the name the Morada is in. Copy it exactly as written there.
+3. Local is a município (the concelho, not the town: Alverca → `Vila Franca de Xira`). In `Lisboa.txt` the Morada may be a município, or, when it is inside the city of Lisboa, a freguesia from the second list. Prefer the freguesia if the Morada or a page names it; otherwise use the município `Lisboa`.
+4. No name in the file fits: Local `null`. Never write a Local that is not a line of that file; `scripts/check.py` rejects it.
 
 Áreas slugs: `clinica neuropsicologia psicoterapia educacao organizacoes justica comunitaria desporto`. Nothing else is valid. Anything that does not fit goes in Adicional.
 
@@ -56,7 +65,7 @@ Write `OUT/eID.json` with the Write tool. Plain values, no HTML, no escaping, no
 
 ```json
 {
-  "cidade": "Cascais",
+  "local": "Cascais",
   "distrito": "Lisboa",
   "morada": "Rua X 12, 2750-000 Cascais",
   "areas": ["clinica", "educacao"],

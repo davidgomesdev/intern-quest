@@ -27,8 +27,8 @@ Repo contents (small on purpose): `index.html`, its CSS and JS files, `README.md
 | 1 | Status | emoji | `⬜` NOT-FILLED, `✅` FILLED |
 | 2 | Nº | int | OPP protocol number; also the row id |
 | 3 | Nome | text | From OPP; never edited by subagents |
-| 4 | Cidade | text | One city (concelho). See 4.2 |
-| 5 | Distrito | text | Best effort: only if clearly visible on the entity's webpage, else `<i>desconhecido</i>` |
+| 4 | Local | text | One name from `lookup/<Distrito>.txt` (município; for Lisboa also its freguesias). See 4.2 |
+| 5 | Distrito | text | One of `lookup/distritos.txt` (18 distritos plus Açores and Madeira), matched from the Morada; else `<i>desconhecido</i>` |
 | 6 | Morada | text | Street address, as found |
 | 7 | Áreas | tokens | From the fixed list in 4.1; one or more |
 | 8 | Adicional | text | Free text: anything the entity says that the fixed list does not capture |
@@ -58,7 +58,7 @@ Rules:
 
 ### 4.2 Missing values
 
-A field the subagent could not find is written as `<i>indisponível</i>`, never left empty. Empty means "not yet researched". Exception: Áreas and Distrito use `<i>desconhecido</i>` instead (same meaning: the subagent could not determine it). Distrito is never inferred from the city or from memory; it is filled only when the entity's own page states it. The status emoji, not the cell content, says whether research happened.
+A field the subagent could not find is written as `<i>indisponível</i>`, never left empty. Empty means "not yet researched". Exception: Áreas and Distrito use `<i>desconhecido</i>` instead (same meaning: the subagent could not determine it). Distrito and Local come only from matching the Morada against the `lookup/` lists (Local must be a name in the file of the row's Distrito; no Distrito means no Local). `scripts/check.py` enforces this. The status emoji, not the cell content, says whether research happened.
 
 ### 4.3 Status
 
@@ -94,20 +94,20 @@ Rules:
 ## 6. The page
 
 ### 6.1 Table
-All 11 columns shown. **Sortable columns: Estado, Nº, Nome, Cidade, Distrito, Áreas only**; the others (Morada, Adicional, Website, E-mail, Telefone) are not sortable. Header click sorts (asc/desc, toggling), numeric sort for Nº, locale-aware sort (pt) for text, first área label for Áreas. `indisponível`, `desconhecido` and empty cells sort last in both directions.
+All 11 columns shown. **Sortable columns: Estado, Nº, Nome, Local, Distrito, Áreas only**; the others (Morada, Adicional, Website, E-mail, Telefone) are not sortable. Header click sorts (asc/desc, toggling), numeric sort for Nº, locale-aware sort (pt) for text, first área label for Áreas. `indisponível`, `desconhecido` and empty cells sort last in both directions.
 
 ### 6.2 Filters
 - Status: All / ✅ / ⬜ (default: **All**).
-- Filters exist **only** on Nome, Cidade, Áreas (plus Distrito, see below). All other columns are neither sortable nor filterable.
+- Filters exist **only** on Nome, Local, Áreas (plus Distrito, see below). All other columns are neither sortable nor filterable.
 - Nome: text "contains" box, accent- and case-insensitive.
-- Cidade: exact-match dropdown of the cities present.
+- Local: exact-match dropdown of the locais present.
 - Áreas: multi-select; **any-of** semantics only (an entity matches if it has at least one selected área). No all-of toggle.
 - Distrito: exact-match dropdown **[CALL: added, since district is the "near" mechanism; drop it if you disagree]**.
 - Filters combine with AND. A "clear all" button, and a visible "N of 6,345 shown" count.
 - Filter and sort state is kept in the URL hash so a view can be shared and bookmarked.
 
 ### 6.3 Near a city
-v1: "near" means same city or same district. Distrito is best effort (often `<i>desconhecido</i>`), so a district filter will miss entities with unknown district; the city filter remains the reliable one. Distance search is **out of scope** for v1 (see 9).
+v1: "near" means same city or same district. Distrito is best effort (often `<i>desconhecido</i>`), so a district filter will miss entities with unknown district; the Local filter remains the reliable one. Distance search is **out of scope** for v1 (see 9).
 
 ### 6.4 Performance
 6,345 rows in one DOM table must stay responsive. Rendering is by filtered slice (virtual or paged, 50 rows per page) **[CALL]**; the raw rows stay in the HTML so `grep` works and the page works without JS for reading.

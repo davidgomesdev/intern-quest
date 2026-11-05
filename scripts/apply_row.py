@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fill one row of index.html from a research JSON. Usage: scripts/apply_row.py ID FILE.json [index.html]
 
-JSON keys: cidade distrito morada areas(list) adicional website email telefone sources(list).
+JSON keys: local distrito morada areas(list) adicional website email telefone sources(list).
 Missing/null/empty values become the <i>indisponível</i>/<i>desconhecido</i> placeholders.
 Nome, Nº and the row shape come from this script and the existing row, never from the JSON.
 """
@@ -22,7 +22,7 @@ def build(old, d):
     cells = re.findall(r'<td>(.*?)</td>', old)
     val = lambda k, dflt=IND: esc(str(d[k])) if d.get(k) else dflt
     areas = ' '.join(d.get('areas') or []) or DESC
-    new = ['✅', cells[1], cells[2], val('cidade'), val('distrito', DESC), val('morada'),
+    new = ['✅', cells[1], cells[2], val('local'), val('distrito', DESC), val('morada'),
            areas, val('adicional'), val('website'), val('email'), val('telefone')]
     rid = re.match(r'<tr id="(e\d+)"', old).group(1)
     flag = ' data-removed="1"' if ' data-removed="1"' in old[:old.index('>')] else ''

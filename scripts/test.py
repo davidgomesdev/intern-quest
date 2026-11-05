@@ -65,11 +65,14 @@ def test_check_row_rejects():
         "bad status": filled(c0="❌"),
         "Nº mismatch": filled(c1="0002"),
         "filled empty cell": filled(c3=""),
-        "empty Cidade on todo": row(["⬜", "0001", "N", "Lisboa"] + [""] * 7),
+        "empty Local on todo": row(["⬜", "0001", "N", "Lisboa"] + [""] * 7),
+        "Local not in its Distrito": filled(c3="Porto", c4="Lisboa"),
+        "Local without Distrito": filled(c3="Cascais", c4=DESC),
+        "unknown Distrito": filled(c3=IND, c4="Narnia"),
         "unknown slug": filled(c6="clinica foo"),
         "duplicate slug": filled(c6="clinica clinica"),
         "desconhecido + slug": filled(c6="clinica " + DESC),
-        "desconhecido in Cidade": filled(c3=DESC),
+        "desconhecido in Local": filled(c3=DESC),
         "bad website": filled(c8="ftp://x"),
         "bad email": filled(c9="a@b"),
         "phone no plus": filled(c10="212345678"),
@@ -187,7 +190,7 @@ def test_check_diff():
 
 def test_apply_row():
     old = EMPTY
-    full = apply_row.build(old, {"cidade": "Cascais", "distrito": "Lisboa", "morada": "Rua X 12, 2750-000 Cascais",
+    full = apply_row.build(old, {"local": "Cascais", "distrito": "Lisboa", "morada": "Rua X 12, 2750-000 Cascais",
                                  "areas": ["clinica", "educacao"], "adicional": "Intervenção precoce",
                                  "website": "https://example.pt", "email": "geral@example.pt",
                                  "telefone": "+351 212 345 678", "sources": ["u"]})
@@ -321,12 +324,12 @@ def _fold(s):
 
 
 def _gen_rows(n=120):
-    """n generated rows: even n are filled (cidade São João for n%4==0, else Braga), odd n are empty."""
+    """n generated rows: even n are filled (Local Vila do Conde for n%4==0, else Amarante), odd n are empty."""
     out = []
     for i in range(1, n + 1):
         cells = ["⬜", f"{i:04d}", f"Entidade {i:03d}"] + [""] * 8
         if i % 2 == 0:
-            cells = ["✅", f"{i:04d}", f"Entidade {i:03d}", "São João" if i % 4 == 0 else "Braga", "Porto",
+            cells = ["✅", f"{i:04d}", f"Entidade {i:03d}", "Vila do Conde" if i % 4 == 0 else "Amarante", "Porto",
                      "Rua X 1", "clinica", "Nota", "https://x.example", "a@x.example", "+351 210 000 000"]
         out.append(row(cells, id_=f"e{i:04d}"))
     assert all(check.check_row(r) == [] for r in out)
@@ -466,8 +469,8 @@ def test_page():
         dom = small("ord=nome&dir=desc")
         assert 'aria-sort="descending"' in _sort(dom, "nome") and "aria-sort" not in _sort(dom, "n")
         assert 'aria-sort="ascending"' in _sort(small(), "n")
-        assert _ids(small("ord=cidade&dir=asc")) == ["e0001", "e0003", "e0004", "e0002", "e0005"]
-        assert _ids(small("ord=cidade&dir=desc")) == ["e0004", "e0003", "e0001", "e0002", "e0005"]
+        assert _ids(small("ord=local&dir=asc")) == ["e0001", "e0003", "e0004", "e0002", "e0005"]
+        assert _ids(small("ord=local&dir=desc")) == ["e0004", "e0003", "e0001", "e0002", "e0005"]
         assert _ids(small("ord=distrito&dir=desc")) == ["e0004", "e0001", "e0003", "e0002", "e0005"]
 
         dom = small()
@@ -498,7 +501,7 @@ def test_page():
             assert _pager(big(h)) == "Página 1 de 3", h
         dom = big("p=2&nome=entidade%2001")
         assert _count(dom).startswith("10 de 120") and _pager(dom) == "Página 1 de 1"
-        assert _count(big("c=S%C3%A3o%20Jo%C3%A3o")).startswith("30 de 120")
+        assert _count(big("c=Vila%20do%20Conde")).startswith("30 de 120")
         assert _count(big("d=Porto")).startswith("60 de 120")
         bad_url = fixture[0].replace("https://www.alfa.example", "https://a:99999")
         assert bad_url != fixture[0]

@@ -8,7 +8,7 @@ const AREAS = { // slug -> [emoji, label]; one place for both
   comunitaria: ['🤝', 'Comunitária / Intervenção Social'], desporto: ['🏅', 'Desporto'], desconhecido: ['❔', 'Desconhecido'],
 };
 const KEY = { // sortable column -> value; null = missing, sorts last in both directions
-  estado: r => +r.ok, n: r => r.n, nome: r => r.nome, cidade: r => r.cidade, distrito: r => r.distrito,
+  estado: r => +r.ok, n: r => r.n, nome: r => r.nome, local: r => r.local, distrito: r => r.distrito,
   areas: r => (r.areas[0] && r.areas[0] !== 'desconhecido' ? AREAS[r.areas[0]][1] : null),
 };
 const COLL = new Intl.Collator('pt', { sensitivity: 'base', numeric: true });
@@ -25,7 +25,7 @@ function parse() {
     const val = i => (miss(c[i]) ? null : c[i].textContent);
     const areas = miss(c[6]) ? (c[6].firstElementChild ? ['desconhecido'] : []) : c[6].textContent.split(' ');
     return { el, n: +c[1].textContent, ok: c[0].textContent === '✅', removed: 'removed' in el.dataset,
-      nome: c[2].textContent, cidade: val(3), distrito: val(4), dUnk: !!c[4].firstElementChild, areas,
+      nome: c[2].textContent, local: val(3), distrito: val(4), dUnk: !!c[4].firstElementChild, areas,
       kNome: norm(c[2].textContent), done: false };
   });
   TOTAL = ROWS.filter(r => !r.removed).length;
@@ -33,7 +33,7 @@ function parse() {
 
 function buildOptions() {
   const distinct = k => [...new Set(ROWS.map(r => r[k]).filter(Boolean))].sort(COLL.compare);
-  form.elements.c.append(...distinct('cidade').map(v => new Option(v)));
+  form.elements.c.append(...distinct('local').map(v => new Option(v)));
   form.elements.d.options[1].before(...distinct('distrito').map(v => new Option(v)));
 }
 
@@ -70,7 +70,7 @@ function fromForm() {
 }
 
 function matches(r, q) {
-  return r.kNome.includes(q.nome) && (!S.c || r.cidade === S.c)
+  return r.kNome.includes(q.nome) && (!S.c || r.local === S.c)
     && (!S.d || (S.d === 'desconhecido' ? r.dUnk : r.distrito === S.d))
     && (!S.a.length || S.a.some(a => r.areas.includes(a)))
     && (S.estado === 'todos' || r.ok === (S.estado === 'ok'))

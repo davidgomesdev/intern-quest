@@ -100,7 +100,7 @@ All 11 columns shown. **Sortable columns: Estado, Nº, Nome, Cidade, Distrito, �
 - Status: All / ✅ / ⬜ (default: **All**).
 - Filters exist **only** on Nome, Cidade, Áreas (plus Distrito, see below). All other columns are neither sortable nor filterable.
 - Nome: text "contains" box, accent- and case-insensitive.
-- Cidade: text search with autocomplete from the cities present, plus exact-match dropdown **[CALL: both]**.
+- Cidade: exact-match dropdown of the cities present.
 - Áreas: multi-select; **any-of** semantics only (an entity matches if it has at least one selected área). No all-of toggle.
 - Distrito: exact-match dropdown **[CALL: added, since district is the "near" mechanism; drop it if you disagree]**.
 - Filters combine with AND. A "clear all" button, and a visible "N of 6,345 shown" count.

@@ -24,11 +24,9 @@
 <form id="filters" role="search" aria-label="Filtrar entidades">
   <div class="campos">
     <label class="campo nome">Nome da entidade <input type="search" name="nome" autocomplete="off" placeholder="ex.: Santa Casa, clínica, agrupamento…"></label>
-    <label class="campo">Cidade <input type="search" name="cidade" list="cidades" autocomplete="off"></label>
-    <label class="campo">Só esta cidade <select name="c"><option value="">Todas</option></select></label>
+    <label class="campo">Cidade <select name="c"><option value="">Todas</option></select></label>
     <label class="campo">Distrito <select name="d"><option value="">Todos</option><option value="desconhecido">Desconhecido</option></select></label>
   </div>
-  <datalist id="cidades"></datalist>
   <fieldset>
     <legend>Áreas de atuação</legend>
     <div class="opcoes">

@@ -5,7 +5,7 @@ description: Use when given one OPP protocol number (e.g. 0001) and an output di
 
 # Research one entity
 
-Input: a protocol number, the repo path, and an output directory `OUT`. Output: two files in `OUT`. You never run git or `gh`, never edit `index.html`, never write files anywhere else. The orchestrator (`fill-batch`) validates the row, commits it and opens the PR. The row format is the contract in `SPEC.md` §4 and §5; this skill is the procedure.
+Input: a protocol number, the repo path, and an output directory `OUT`. Output: one JSON file in `OUT`. You never run git or `gh`, never edit `index.html`, never write files anywhere else. The orchestrator (`fill-batch`) validates the row, commits it and opens the PR. The row format is the contract in `SPEC.md` §4 and §5; this skill is the procedure.
 
 Below, `ID` is the number zero-padded to at least 4 digits (`1` → `0001`, `10000` stays `10000`).
 
@@ -50,26 +50,30 @@ Collect, using only what a page states:
 
 A row where every field is indisponível/desconhecido is valid: it means "searched, found nothing". Do not spend more than about 10 searches.
 
-## 3. Write the two files
+## 3. Write the JSON
 
-Escape text: `&` → `&amp;`, `<` → `&lt;`, `>` → `&gt;`. No cell may be empty. Eleven cells, this order, status `✅`, all on one line:
+Write `OUT/eID.json` with the Write tool. Plain values, no HTML, no escaping, no placeholders: the orchestrator builds the row, escapes it and fills `<i>indisponível</i>` / `<i>desconhecido</i>` for anything you leave out. Do not include the Nome.
 
+```json
+{
+  "cidade": "Cascais",
+  "distrito": "Lisboa",
+  "morada": "Rua X 12, 2750-000 Cascais",
+  "areas": ["clinica", "educacao"],
+  "adicional": "Intervenção precoce",
+  "website": "https://example.pt",
+  "email": "geral@example.pt",
+  "telefone": "+351 212 345 678",
+  "sources": ["https://example.pt/contactos"]
+}
 ```
-<tr id="eID"><td>✅</td><td>ID</td><td>NOME</td><td>CIDADE</td><td>DISTRITO</td><td>MORADA</td><td>AREAS</td><td>ADICIONAL</td><td>WEBSITE</td><td>EMAIL</td><td>TELEFONE</td></tr>
-```
 
-Example:
+- A value you did not find on a page: `null` (or leave the key out). Never guess.
+- `areas`: slugs from the list above only, no duplicates; `[]` if none fit.
+- `sources`: every page you took a value from; `[]` if you found nothing.
+- Fields still follow the formats in the table (URL starts with `http(s)://`, phone `+351 212 345 678` style).
 
-```
-<tr id="e0001"><td>✅</td><td>0001</td><td>Centro Doutor João dos Santos - Casa da Praia (IPSS)</td><td>Cascais</td><td>Lisboa</td><td>Rua X 12, 2750-000 Cascais</td><td>clinica educacao</td><td>Intervenção precoce</td><td>https://example.pt</td><td>geral@example.pt</td><td><i>indisponível</i></td></tr>
-```
-
-Write exactly these two files, one line in the first:
-
-- `OUT/eID.row`: the full new `<tr ...>...</tr>` line.
-- `OUT/eID.sources`: every page you took a value from, one URL per line (empty file if you found nothing).
-
-Use the Write tool or a `cat > file <<'EOF'` heredoc. Do not open `index.html` in an editor; it has 6,000+ lines.
+Do not open `index.html` in an editor; it has 6,000+ lines.
 
 ## 4. Report
 

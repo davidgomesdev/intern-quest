@@ -22,6 +22,7 @@ def load(name):
 
 check = load("check")
 sync = load("sync")
+apply_row = load("apply_row")
 
 TD = lambda *c: "".join(f"<td>{x}</td>" for x in c)
 IND, DESC = "<i>indisponível</i>", "<i>desconhecido</i>"
@@ -172,6 +173,21 @@ def test_check_diff():
     # no row change
     assert cd("", ["app.js"], None) == []
     assert cd(diff(extra=[("<p>a</p>", "<p>b</p>")]), ["index.html", "app.js"], None) == []
+
+
+def test_apply_row():
+    old = EMPTY
+    full = apply_row.build(old, {"cidade": "Cascais", "distrito": "Lisboa", "morada": "Rua X 12, 2750-000 Cascais",
+                                 "areas": ["clinica", "educacao"], "adicional": "Intervenção precoce",
+                                 "website": "https://example.pt", "email": "geral@example.pt",
+                                 "telefone": "+351 212 345 678", "sources": ["u"]})
+    assert full == row(["✅", "0001", "Centro Doutor João dos Santos - Casa da Praia (IPSS)"] + FILLED_CELLS[3:]), full
+    assert check.check_row(full) == []
+    # nothing found: placeholders, still valid; & < > escaped
+    empty = apply_row.build(old, {"morada": "A & B <1>"})
+    assert "A &amp; B &lt;1&gt;" in empty and check.check_row(empty) == []
+    assert empty.count(DESC) == 2 and empty.count(IND) == 5
+    assert apply_row.build(old, {}).count(IND) == 6
 
 
 SHELL = os.path.join(os.path.dirname(HERE), "index.html")

@@ -10,7 +10,7 @@ Two phases. Subagents (running `fill-entity`) only research and write `OUT/eID.j
 ## 1. Build the id list
 
 Given ids: zero-pad each to at least 4 digits (`7` → `0007`).
-Given a count N instead: take the first N unfilled rows.
+Given a count N instead: take the first min(N, 20) unfilled rows. A run can only afford about 20 entities: the session shares 200 WebSearch calls per turn across all agents, and each agent uses 5-15. Anything beyond 20 makes agents fail with "budget exhausted". If N > 20, process 20 and say in the report how many remain so the routine can be fired again. Ids given explicitly are capped the same way.
 
 ```bash
 grep -o '^<tr id="e[0-9]*"><td>⬜' index.html | head -N | grep -o '[0-9]\{4,\}'
@@ -38,7 +38,7 @@ Pick the output directory from the scratchpad directory in your system prompt (n
 OUT=<scratchpad>/rows-$(date -u +%Y%m%d-%H%M%S); mkdir -p "$OUT"
 ```
 
-One Agent call per id, all in the same message so they run in parallel, at most 10 per message (send further messages for the rest). Every call uses exactly:
+One Agent call per id, all in the same message so they run in parallel, at most 10 per message, and never more than 20 agents alive at once (the harness refuses more: wait for completions before sending the next message). Every call uses exactly:
 
 - `model`: `haiku` (Haiku 5.5)
 - `effort`: `medium`
@@ -58,7 +58,7 @@ git worktree add -b feat/fill-batch-<stamp> ../intern-quest-wt-fill-<stamp> orig
 cd ../intern-quest-wt-fill-<stamp>
 ```
 
-For each id whose subagent reported `ok` and whose `OUT/eID.json` exists, in ascending order:
+For each id whose subagent reported `ok` and whose `OUT/eID.json` exists, in ascending order (skip any JSON with `"status": "budget-exhausted"` and record `FAILED: budget exhausted`; do not retry in the same turn, the budget is gone):
 
 If the JSON has a `flags` array, the orchestrator records each flag in the row's Adicional before applying: prefix the joined flags with `Revisar: ` and append them after any existing `adicional` text, separated by `; `. Write this into the JSON's `adicional` field, never into the row by hand. Flags are review notes for a human; they do not stop the commit.
 
@@ -77,9 +77,12 @@ If no commit was made, remove the worktree and report; do not open a PR.
 
 ## 5. Push, PR (once)
 
+The repo allows only rebase merges and GitHub refuses to rebase-merge a PR with more than 100 commits. With the cap of 20 entities in step 1 this does not come up; if you ever have more than 100 commits, split them into PRs of at most 100 (branch each part from the current `origin/main`, cherry-pick, and merge them in order).
+
 ```bash
 git push -u origin feat/fill-batch-<stamp>
-gh pr create --title "feat(data): fill N entities" --body "<body>"
+# gh pr create does not work here (GraphQL is blocked); use the REST API:
+gh api -X POST repos/{owner}/{repo}/pulls -f title="feat(data): fill N entities" -f head=feat/fill-batch-<stamp> -f base=main -F body=@<body-file> --jq .number
 ```
 
 Body: a `## Entities` list with one line per entity you dispatched in step 3, written after every subagent has finished and step 4 is done:
@@ -95,8 +98,9 @@ Nothing else per entity: no research notes, no skipped ids (those only go in the
 This skill overrides the global "never merge" rule: merge only after CI succeeds with no warnings or alerts.
 
 ```bash
-sleep 20   # let checks register
-gh pr checks --watch --fail-fast
+# poll check-runs via REST (gh pr checks needs GraphQL); run the loop in the background and wait for its notification
+SHA=$(git rev-parse HEAD)
+until o=$(gh api repos/{owner}/{repo}/commits/$SHA/check-runs --jq '[.check_runs[]|"\(.status):\(.conclusion)"]|join(" ")'); [ -n "$o" ] && ! echo "$o" | grep -qE 'queued|in_progress|pending'; do sleep 20; done
 ```
 
 - Exit 0 (all pass): look for alerts before merging:
@@ -110,10 +114,10 @@ gh pr checks --watch --fail-fast
     gh api repos/{owner}/{repo}/check-runs/$id/annotations --jq '.[] | select(.annotation_level != "notice") | "\(.annotation_level): \(.message)"'
   done
   # any review or comment on the PR
-  gh pr view --json comments,reviews --jq '(.comments | length) + (.reviews | length)'
+  gh api repos/{owner}/{repo}/issues/PR/comments --jq length; gh api repos/{owner}/{repo}/pulls/PR/reviews --jq length
   ```
 
-  Any output from the first two, or a count above 0 from the third, is an alert: do not merge, report `alert, not merged <PR URL>: <first alert>`. Otherwise `gh pr merge --rebase` (keeps one commit per entity on `main`; no `--delete-branch`, the branch is checked out in the worktree, and the repo deletes it on merge).
+  Any output from the first two, or a count above 0 from the third, is an alert: do not merge, report `alert, not merged <PR URL>: <first alert>`. Otherwise `gh api -X PUT repos/{owner}/{repo}/pulls/PR/merge -f merge_method=rebase` (auto mode may deny the merge as "Merge Without Review"; if so do not work around it, notify the owner with the PR URL and stop. Keeps one commit per entity on `main`; no `--delete-branch`, the branch is checked out in the worktree, and the repo deletes it on merge).
 - Non-zero exit (a check failed): do not merge. Report `CI failed <PR URL>`.
 - "no checks reported" after a second attempt 30s later: do not merge. Report `no CI checks <PR URL>`.
 - Merge refused (conflict, branch protection): do not retry or bypass. Report `merge refused: <reason>`.

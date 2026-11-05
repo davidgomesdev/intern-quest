@@ -57,7 +57,7 @@ Use the Morada you collected (never the entity's name or memory), and the lists 
 
 Áreas slugs: `clinica neuropsicologia psicoterapia educacao organizacoes justica comunitaria desporto`. Nothing else is valid. Anything that does not fit goes in Adicional.
 
-A row where every field is indisponível/desconhecido is valid: it means "searched, found nothing". Do not spend more than about 10 searches.
+A row where every field is indisponível/desconhecido is valid: it means "searched, found nothing". Write it only after at least one search actually returned results. If a search is refused because the budget is exhausted, write no row; write `OUT/eID.json` as `{"status": "budget-exhausted"}` instead, and report `FAILED: budget exhausted`. Do not spend more than 4 WebSearch calls (the session shares a budget of 200 per turn across all agents). Do not re-fetch a domain that returned 403, 429 or 503 or did not resolve; use another source or stop. Never call `add_repo`: the repo is already at the path you were given.
 
 ## 3. Write the JSON
 
@@ -73,13 +73,15 @@ Write `OUT/eID.json` with the Write tool. Plain values, no HTML, no escaping, no
   "website": "https://example.pt",
   "email": "geral@example.pt",
   "telefone": "+351 212 345 678",
-  "sources": ["https://example.pt/contactos"]
+  "sources": ["https://example.pt/contactos"],
+  "flags": ["morada only from a directory"]
 }
 ```
 
 - A value you did not find on a page: `null` (or leave the key out). Never guess.
 - `areas`: slugs from the list above only, no duplicates; `[]` if none fit.
 - `sources`: every page you took a value from, as full `http(s)` URLs; `[]` if you found nothing. They are shown on the site in a popup on the ✅ icon.
+- `flags`: optional list of short review notes (e.g. address only from a third-party directory, conflicting sources, entity looks inactive). The orchestrator copies them into Adicional as `Revisar: ...`. Use it whenever a value is not confirmed on the entity's own site.
 - Fields still follow the formats in the table (URL starts with `http(s)://`, phone `+351 212 345 678` style).
 
 Do not open `index.html` in an editor; it has 6,000+ lines.

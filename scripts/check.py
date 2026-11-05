@@ -121,13 +121,17 @@ def check_diff(diff_text, changed_files, branch):
             errs.append(f'row without a valid id: {l[:60]}')
     if errs:
         return errs
-    toggle = (len(rm) == 1 and len(add) == 1 and _rid(rm[0]) == _rid(add[0])
-              and rm[0].replace(FLAG, '') == add[0].replace(FLAG, ''))
-    if len(rm) == 1 and len(add) == 1 and not toggle and _rid(rm[0]) == _rid(add[0]):
+    pairs = list(zip(rm, add))
+    fills = (len(rm) == len(add) and len({_rid(l) for l in rm}) == len(rm)
+             and all(_rid(a) == _rid(b) and a.replace(FLAG, '') != b.replace(FLAG, '')
+                     for a, b in pairs))
+    if fills:
         errs += [f'non-row line of index.html changed: {l[:60]}' for l in other]
         errs += [f'file changed besides index.html: {f}' for f in changed_files
                  if f != 'index.html']
-        return errs + _entity(rm[0], add[0], branch)
+        for a, b in pairs:
+            errs += _entity(a, b, branch if len(pairs) == 1 else None)
+        return errs
     return errs + _sync(rm, add)
 
 

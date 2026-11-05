@@ -145,7 +145,9 @@ def test_check_diff():
     assert cd(diff((r1, f1)), html, None) == []
     assert cd(diff((r1, f1)), html, "feat/e0001-fill") == []
     assert cd(diff((r1, f1)), html, "feat/e0002-fill")
-    assert cd(diff((r1, f1), (r2, f2)), html, None)
+    assert cd(diff((r1, f1), (r2, f2)), html, None) == []  # batch of fills
+    assert cd(diff((r1, f1), (r2, R("0002", "✅", name="Other"))), html, None)
+    assert cd(diff((r1, f1), (r2, f2), extra=[("<p>a</p>", "<p>b</p>")]), html, None)
     assert cd(diff((r1, R("0001", "✅", name="Other"))), html, None)
     assert cd(diff((r1, R("0001", "✅", attr=' data-removed="1"'))), html, None)
     assert cd(diff((r1, f1), extra=[("<p>a</p>", "<p>b</p>")]), html, None)

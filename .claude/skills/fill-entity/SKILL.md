@@ -27,12 +27,20 @@ grep '^<tr id="eID">' index.html
 ```
 
 - No output: the id does not exist or is flagged `data-removed`. Stop, report it, delete the worktree (step 7).
-- Second cell is `✅`: already filled. Stop, report it, delete the worktree.
+- Second cell is `✅`: already filled. Stop, report it, delete the worktree. Exception, a refill: Website and Telefone are both `<i>indisponível</i>`. Then go on, and treat the existing cells as leads, not facts: keep a value only if a page you open confirms it.
 - Otherwise the third `<td>` is the Nome. Copy it exactly. Never change it.
 
 ## 3. Research
 
-Web search for the Nome (add the city if the name contains one). Prefer the entity's own website; then official directories (SNS, Carta Social, câmara municipal). Open pages to read them. Do not guess from memory.
+The search tool is US-only. A bare Portuguese name returns Brazilian pages and PDFs, so:
+
+1. Always add `Portugal` to the query. Quote the brand word: `"Psicosorrir" Portugal`.
+2. The Nome is often the registry name, not the trading name. If the full Nome finds nothing, search the distinctive brand word alone (the part before " - ", or the first capitalised word) with `Portugal`, then the NIF if you have it. Add the city if the name contains one.
+3. A hit counts only if it is in Portugal (`.pt`, +351, a Portuguese city). Ignore `.br` results.
+4. If standard mode returns nothing useful, retry the same query in extended mode before giving up.
+5. Directories (einforma, Doctoralia, Portal da Saúde Mental) usually point to the entity's own site: open that site for the values.
+
+Prefer the entity's own website; then official directories (SNS, Carta Social, câmara municipal). Open pages to read them. Do not guess from memory.
 
 Collect, using only what a page states:
 

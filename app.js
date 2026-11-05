@@ -17,7 +17,7 @@ const form = $('#filters'), tbody = $('#rows');
 let ROWS = [], TOTAL = 0, S;
 
 const norm = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();
-const defaults = () => ({ nome: '', cidade: '', c: '', d: '', a: [], estado: 'todos', rem: false, ord: 'n', dir: 'asc', p: 1 });
+const defaults = () => ({ nome: '', c: '', d: '', a: [], estado: 'todos', rem: false, ord: 'n', dir: 'asc', p: 1 });
 
 function parse() {
   ROWS = Array.from(tbody.rows, el => {
@@ -26,22 +26,20 @@ function parse() {
     const areas = miss(c[6]) ? (c[6].firstElementChild ? ['desconhecido'] : []) : c[6].textContent.split(' ');
     return { el, n: +c[1].textContent, ok: c[0].textContent === '✅', removed: 'removed' in el.dataset,
       nome: c[2].textContent, cidade: val(3), distrito: val(4), dUnk: !!c[4].firstElementChild, areas,
-      kNome: norm(c[2].textContent), kCidade: norm(val(3) ?? ''), done: false };
+      kNome: norm(c[2].textContent), done: false };
   });
   TOTAL = ROWS.filter(r => !r.removed).length;
 }
 
 function buildOptions() {
   const distinct = k => [...new Set(ROWS.map(r => r[k]).filter(Boolean))].sort(COLL.compare);
-  const cidades = distinct('cidade');
-  $('#cidades').append(...cidades.map(v => new Option(v)));
-  form.elements.c.append(...cidades.map(v => new Option(v)));
+  form.elements.c.append(...distinct('cidade').map(v => new Option(v)));
   form.elements.d.options[1].before(...distinct('distrito').map(v => new Option(v)));
 }
 
 function readState() {
   const q = new URLSearchParams(location.hash.slice(1)), g = k => q.get(k) || '';
-  S = { ...defaults(), nome: g('nome'), cidade: g('cidade'), c: g('c'), d: g('d'),
+  S = { ...defaults(), nome: g('nome'), c: g('c'), d: g('d'),
     a: g('a').split(',').filter(k => Object.hasOwn(AREAS, k)), rem: g('rem') === '1',
     estado: ['ok', 'todo'].includes(g('estado')) ? g('estado') : 'todos',
     ord: Object.hasOwn(KEY, g('ord')) ? g('ord') : 'n', dir: g('dir') === 'desc' ? 'desc' : 'asc', p: parseInt(g('p'), 10) || 1 };
@@ -61,18 +59,18 @@ function writeState() {
 
 function toForm() {
   const f = form.elements;
-  f.nome.value = S.nome; f.cidade.value = S.cidade; f.c.value = S.c; f.d.value = S.d; f.estado.value = S.estado; f.rem.checked = S.rem;
+  f.nome.value = S.nome; f.c.value = S.c; f.d.value = S.d; f.estado.value = S.estado; f.rem.checked = S.rem;
   form.querySelectorAll('[name=a]').forEach(i => { i.checked = S.a.includes(i.value); });
 }
 
 function fromForm() {
   const f = form.elements;
-  Object.assign(S, { nome: f.nome.value, cidade: f.cidade.value, c: f.c.value, d: f.d.value, estado: f.estado.value, rem: f.rem.checked,
+  Object.assign(S, { nome: f.nome.value, c: f.c.value, d: f.d.value, estado: f.estado.value, rem: f.rem.checked,
     a: Array.from(form.querySelectorAll('[name=a]:checked'), i => i.value), p: 1 });
 }
 
 function matches(r, q) {
-  return r.kNome.includes(q.nome) && r.kCidade.includes(q.cidade) && (!S.c || r.cidade === S.c)
+  return r.kNome.includes(q.nome) && (!S.c || r.cidade === S.c)
     && (!S.d || (S.d === 'desconhecido' ? r.dUnk : r.distrito === S.d))
     && (!S.a.length || S.a.some(a => r.areas.includes(a)))
     && (S.estado === 'todos' || r.ok === (S.estado === 'ok'))
@@ -151,7 +149,7 @@ function renderCount(list, last) {
     p.querySelector('[data-p=prev]').disabled = S.p <= 1;
     p.querySelector('[data-p=next]').disabled = S.p >= last;
   });
-  const active = [S.nome, S.cidade, S.c, S.d].filter(Boolean).length + S.a.length + (S.estado !== 'todos') + S.rem;
+  const active = [S.nome, S.c, S.d].filter(Boolean).length + S.a.length + (S.estado !== 'todos') + S.rem;
   $('#ativos').textContent = active ? `(${active} ${active > 1 ? 'ativos' : 'ativo'})` : '';
   $('#vazio').hidden = list.length > 0;
   $('.tabela').hidden = list.length === 0;
@@ -162,7 +160,7 @@ function renderCount(list, last) {
 }
 
 function update() {
-  const q = { nome: norm(S.nome), cidade: norm(S.cidade) };
+  const q = { nome: norm(S.nome) };
   const list = sortRows(ROWS.filter(r => matches(r, q)));
   const last = Math.max(1, Math.ceil(list.length / PAGE));
   S.p = Math.min(Math.max(S.p, 1), last);

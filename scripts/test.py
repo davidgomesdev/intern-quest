@@ -426,8 +426,7 @@ def test_page():
                 ("", "5 de 5 entidades, 4 com dados", ""), ("a=clinica", "2 de 5 entidades, 2 com dados", "(1 ativo)"),
                 ("a=clinica,neuropsicologia", "3 de 5 entidades, 3 com dados", "(2 ativos)"),
                 ("a=", "5 de 5 entidades, 4 com dados", ""),
-                ("cidade=lisboa", "1 de 5 entidades, 1 com dados", "(1 ativo)"),
-                ("cidade=LISBOA", "1 de 5 entidades, 1 com dados", "(1 ativo)"),
+                ("c=Lisboa", "1 de 5 entidades, 1 com dados", "(1 ativo)"),
                 ("nome=agata", "1 de 5 entidades, 1 com dados", "(1 ativo)"),
                 ("nome=%C3%81GATA", "1 de 5 entidades, 1 com dados", "(1 ativo)"),
                 ("nome=epsilon", "1 de 5 entidades, 1 com dados", "(1 ativo)"),
@@ -499,7 +498,6 @@ def test_page():
             assert _pager(big(h)) == "Página 1 de 3", h
         dom = big("p=2&nome=entidade%2001")
         assert _count(dom).startswith("10 de 120") and _pager(dom) == "Página 1 de 1"
-        assert _count(big("cidade=sao")).startswith("30 de 120") and _count(big("cidade=S%C3%83O")).startswith("30 de 120")
         assert _count(big("c=S%C3%A3o%20Jo%C3%A3o")).startswith("30 de 120")
         assert _count(big("d=Porto")).startswith("60 de 120")
         bad_url = fixture[0].replace("https://www.alfa.example", "https://a:99999")

@@ -441,6 +441,8 @@ def test_page():
                 ("d=Lisboa", "2 de 5 entidades, 2 com dados", "(1 ativo)"),
                 ("d=desconhecido", "0 de 5 entidades, 0 com dados", "(1 ativo)"),
                 ("d=desconhecido&vazias=1", "1 de 5 entidades, 1 com dados", "(2 ativos)"),
+                ("contacto=1", D3, "(1 ativo)"),
+                ("contacto=1&estado=todos", D3, "(2 ativos)"),
                 ("estado=todo", "1 de 5 entidades, 0 com dados", "(1 ativo)"),
                 ("estado=ok", D3, ""),
                 ("estado=todos", "4 de 5 entidades, 3 com dados", "(1 ativo)"),

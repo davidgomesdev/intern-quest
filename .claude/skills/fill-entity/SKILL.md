@@ -23,6 +23,8 @@ grep '^<tr id="eID"[ >]' REPO/index.html
 
 ## 2. Research
 
+**Search errors stop you.** If the WebSearch tool returns an error, a budget or quota message, or a refusal (anything other than a result list), stop at once: do not retry, do not switch to another search or fetch route, and do not write `OUT/eID.json`. Report `eID | NOME | FAILED: web search unavailable: <message>`. An empty result list, or results that do not match the entity, is a normal result and counts as "searched, found nothing".
+
 The search tool is US-only. A bare Portuguese name returns Brazilian pages and PDFs, so:
 
 1. Always add `Portugal` to the query. Quote the brand word: `"Psicosorrir" Portugal`.
@@ -87,3 +89,5 @@ Do not open `index.html` in an editor; it has 6,000+ lines.
 ## 4. Report
 
 Final message, one line, always with the Nome as read in step 1: `eID | NOME | ok`, or `eID | NOME | FAILED: <reason>`. If step 1 found no row, use `—` for NOME.
+
+A run that hit a search error (section 2) writes no JSON, so the orchestrator records it as FAILED. Never write a JSON for a run you could not finish searching.

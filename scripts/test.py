@@ -26,6 +26,7 @@ apply_row = load("apply_row")
 
 TD = lambda *c: "".join(f"<td>{x}</td>" for x in c)
 IND, DESC = "<i>indisponível</i>", "<i>desconhecido</i>"
+DESC_TD = f"<td>{DESC}</td>"  # a whole cell with an unknown Distrito
 
 
 def row(cells, id_="e0001", attr=""):
@@ -201,6 +202,32 @@ def test_apply_row():
     assert "A &amp; B &lt;1&gt;" in empty and check.check_row(empty) == []
     assert empty.count(DESC) == 2 and empty.count(IND) == 5
     assert apply_row.build(old, {}).count(IND) == 6
+
+
+def test_apply_batch():
+    """End to end in a throwaway repo: one ok commit, one pre-failed, one missing JSON."""
+    d = tempfile.mkdtemp()
+    try:
+        g = lambda *a: subprocess.run(["git", "-C", d, *a], capture_output=True, text=True, check=True).stdout
+        rows = [row(["⬜", n, f"Nome {n}"] + [""] * 8, id_="e" + n) for n in ("0001", "0002", "0003")]
+        with open(os.path.join(d, "index.html"), "w", encoding="utf-8") as f:
+            f.write("\n".join(rows))
+        g("init", "-q"); g("config", "user.name", "t"); g("config", "user.email", "t@t")
+        g("config", "commit.gpgsign", "false")  # throwaway repo only
+        g("add", "."); g("commit", "-qm", "init")
+        out = os.path.join(d, "out"); os.mkdir(out)
+        with open(os.path.join(out, "e0001.json"), "w", encoding="utf-8") as f:
+            json.dump({"morada": "Rua X", "flags": ["duvida"], "sources": ["https://a.pt/x"]}, f)
+        r = subprocess.run([sys.executable, os.path.join(HERE, "apply_batch.py"), out, "0001", "0002:no search", "0003"],
+                           cwd=d, capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        assert r.stdout.split("\n")[:3] == ["e0001 ok", "e0002 FAILED: no search", "e0003 FAILED: no e0003.json"], r.stdout
+        assert g("log", "--format=%s").split() == ["feat(data):", "fill", "e0001", "init"], g("log", "--oneline")
+        assert "Revisar: duvida" in open(os.path.join(d, "index.html"), encoding="utf-8").read()
+        body = open(os.path.join(out, "body.md"), encoding="utf-8").read()
+        assert "- e0001 (Nome 0001): ok, https://a.pt/x" in body and "- e0002 (Nome 0002): FAILED: no search" in body, body
+    finally:
+        shutil.rmtree(d)
 
 
 SHELL = os.path.join(os.path.dirname(HERE), "index.html")
@@ -414,6 +441,12 @@ def test_head_sets_js_class_before_css():
     assert i < j and head.rindex("<script", 0, i) > head.index("<head>") and "setTimeout" in head[i:j]
 
 
+def test_lookup_embedded():
+    embed = load("embed_lookup")
+    with open(SHELL, encoding="utf-8") as f:
+        assert embed.line() in f.read().split("\n"), "index.html lookup is stale: run scripts/embed_lookup.py"
+
+
 def test_page():
     chrome = _chrome()
     if not chrome:
@@ -511,6 +544,14 @@ def test_page():
         assert _count(dom).startswith("10 de 120") and _pager(dom) == "Página 1 de 1"
         assert _count(big("c=Vila%20do%20Conde")).startswith("30 de 120")
         assert _count(big("d=Porto")).startswith("60 de 120")
+        clone = lambda i: fixture[0].replace('id="e0001"', f'id="e000{i}"').replace("<td>0001</td>", f"<td>000{i}</td>")
+        orphan = clone(7).replace("<td>Lisboa</td>", DESC_TD, 1)  # Cascais with no Distrito (scrape failure)
+        clash = clone(8).replace("<td>Lisboa</td>", "<td>Porto</td>", 1)  # Cascais with Distrito Porto
+        assert orphan != fixture[0] and clash != fixture[0]
+        orph = Page(chrome, tmp, fixture + [orphan, clash]).dump
+        assert set(_ids(orph(ALL + "d=Lisboa"))) == {"e0001", "e0003", "e0007", "e0008"}  # Local Todos: Distrito OR a Lisboa local
+        assert set(_ids(orph(ALL + "d=Lisboa&c=Cascais"))) == {"e0001", "e0007", "e0008"}  # chosen Local wins
+        assert orph(ALL).count("Cascais fica em Lisboa, não em Porto") == 1  # warning only on the conflicting row
         bad_url = fixture[0].replace("https://www.alfa.example", "https://a:99999")
         assert bad_url != fixture[0]
         dom = Page(chrome, tmp, [bad_url] + fixture[1:]).dump()

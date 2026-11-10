@@ -8,7 +8,7 @@ const AREAS = { // slug -> [emoji, label]; one place for both
   comunitaria: ['🤝', 'Comunitária / Intervenção Social'], desporto: ['🏅', 'Desporto'], desconhecido: ['❔', 'Desconhecido'],
 };
 const STATUS = { ver: 'Por ver', visto: 'Visto', contactar: 'Por Contactar', email: 'Contactado por e-mail',
-  entrevista: 'Entrevista feita', consultado: 'Já consultado' }; // first = default, never stored
+  entrevista: 'Entrevista feita', descartado: 'Descartado' }; // first = default, never stored
 const NOTE = ['email', 'entrevista'], FOLLOW_MS = 5 * 864e5; // these get a follow-up reminder after 5 days
 const LISTS = ['a', 'st']; // multi-value filters (OR): stored comma-joined in the hash
 let SAVED = {}; // entity id -> { s: status, t: ms when set }; persisted in localStorage
@@ -212,6 +212,14 @@ tbody.addEventListener('change', e => {
   try { localStorage.setItem('iq-status', JSON.stringify(SAVED)); } catch { /* storage full or blocked */ }
   update();
 });
+if (new URLSearchParams(location.search).has('dev')) { // open index.html?dev to test the follow-up banner
+  $('#dev').hidden = false;
+  $('#dev button').onclick = () => {
+    for (const k in SAVED) SAVED[k].t -= FOLLOW_MS;
+    try { localStorage.setItem('iq-status', JSON.stringify(SAVED)); } catch { /* ignore */ }
+    update();
+  };
+}
 $('thead').addEventListener('click', e => {
   const th = e.target.closest('th[data-k]');
   if (!th) return;

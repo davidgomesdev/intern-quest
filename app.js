@@ -1,7 +1,7 @@
 'use strict';
 document.documentElement.classList.add('js'); // CSS hides the raw rows only while this script is running
 // Abre Portas: filter, sort and page the raw <tr> lines of index.html. State lives in the URL hash.
-const PAGE = 50;
+const SIZES = [10, 20, 50, 100]; // per-page choices; first-load default is 20
 const AREAS = { // slug -> [emoji, label]; one place for both
   clinica: ['🩺', 'Clínica e da Saúde'], neuropsicologia: ['🧠', 'Neuropsicologia'], psicoterapia: ['💬', 'Psicoterapia'],
   educacao: ['🎓', 'Educação'], organizacoes: ['💼', 'Trabalho, Social e Organizações'], justica: ['⚖️', 'Justiça / Forense'],
@@ -9,10 +9,18 @@ const AREAS = { // slug -> [emoji, label]; one place for both
 };
 const STATUS = { ver: 'Por ver', visto: 'Visto', contactar: 'Por Contactar', email: 'Contactado por e-mail',
   entrevista: 'Entrevista feita', descartado: 'Descartado' }; // first = default, never stored
-const NOTE = ['email', 'entrevista'], FOLLOW_MS = 5 * 864e5; // these get a follow-up reminder after 5 days
+const NOTE = ['email', 'entrevista'], FOLLOW_DAYS = 3, DEV_SHIFT = 5 * 864e5; // these get a follow-up reminder after 3 business days (5 calendar days always hold 3)
 const LISTS = ['a', 'st']; // multi-value filters (OR): stored comma-joined in the hash
 let SAVED = {}; // entity id -> { s: status, t: ms when set }; persisted in localStorage
 try { SAVED = JSON.parse(localStorage.getItem('iq-status')) || {}; } catch { /* no storage: statuses last this visit only */ }
+let REMIND = true; // follow-up reminders on/off, per browser
+try { REMIND = localStorage.getItem('iq-remind') !== '0'; } catch { /* no storage: on */ }
+function bizDays(t) { // Mon-Fri days from the day after t up to today
+  let n = 0;
+  const end = new Date().setHours(0, 0, 0, 0);
+  for (const d = new Date(t); d.setDate(d.getDate() + 1), d.setHours(0, 0, 0, 0) <= end;) if (d.getDay() % 6) n++;
+  return n;
+}
 const stOf = r => (Object.hasOwn(STATUS, SAVED[r.id]?.s) ? SAVED[r.id].s : 'ver');
 const KEY = { // sortable column -> value; null = missing, sorts last in both directions
   estado: r => +r.ok, n: r => r.n, nome: r => r.nome, local: r => r.local, distrito: r => r.distrito,
@@ -25,7 +33,7 @@ let ROWS = [], TOTAL = 0, S;
 const LOC = {}; // distrito -> Set of locais (from lookup/, embedded in index.html): Local only lists the chosen distrito's
 
 const norm = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();
-const defaults = () => ({ nome: '', c: '', d: '', a: [], st: [], estado: 'ok', vazias: false, contacto: false, ord: 'n', dir: 'asc', p: 1 });
+const defaults = () => ({ nome: '', c: '', d: '', a: [], st: [], estado: 'ok', vazias: false, contacto: false, ord: 'n', dir: 'asc', p: 1, pp: 20 });
 const FLAGS = ['vazias', 'contacto']; // on/off filters: stored as "1" in the hash, absent when off
 
 function parse() {
@@ -58,7 +66,8 @@ function readState() {
   S = { ...defaults(), nome: g('nome'), c: g('c'), d: g('d'),
     a: g('a').split(',').filter(k => Object.hasOwn(AREAS, k)), st: g('st').split(',').filter(k => Object.hasOwn(STATUS, k)), vazias: g('vazias') === '1', contacto: g('contacto') === '1',
     estado: ['todos', 'todo'].includes(g('estado')) ? g('estado') : 'ok',
-    ord: Object.hasOwn(KEY, g('ord')) ? g('ord') : 'n', dir: g('dir') === 'desc' ? 'desc' : 'asc', p: parseInt(g('p'), 10) || 1 };
+    ord: Object.hasOwn(KEY, g('ord')) ? g('ord') : 'n', dir: g('dir') === 'desc' ? 'desc' : 'asc', p: parseInt(g('p'), 10) || 1,
+    pp: SIZES.includes(+g('pp')) ? +g('pp') : 20 };
   if (S.c && !S.d) S.d = Object.keys(LOC).find(d => LOC[d].has(S.c)) || ''; // old links: c= alone // old links: c= alone
   toForm();
   S.c = form.elements.c.value; S.d = form.elements.d.value; // drop values that are not in the lists
@@ -77,6 +86,7 @@ function writeState() {
 function toForm() {
   const f = form.elements;
   f.nome.value = S.nome; f.d.value = S.d; fillLocais(S.d); f.c.value = S.c; f.estado.value = S.estado; f.vazias.checked = S.vazias; f.contacto.checked = S.contacto;
+  $('#pp').value = S.pp;
   form.querySelectorAll('[name=a],[name=st]').forEach(i => { i.checked = S[i.name].includes(i.value); });
 }
 
@@ -158,6 +168,7 @@ function enhance(r) {
   const td = el('td'), sel = el('select', 'pilula'); // status picker (extra column, not part of the HTML row contract)
   sel.setAttribute('aria-label', 'Estado de seguimento'); sel.dataset.id = r.id; r.sel = sel;
   for (const k in STATUS) sel.append(new Option(STATUS[k] + (NOTE.includes(k) ? ' 🔔' : ''), k));
+  sel.title = '🔔 = lembrete de seguimento ao fim de 3 dias úteis';
   td.setAttribute('role', 'cell'); td.append(sel); r.el.append(td);
   r.done = true;
 }
@@ -190,15 +201,15 @@ function renderCount(list, last) {
 }
 
 function followUp() { // banner: note statuses set 5+ days ago
-  const due = ROWS.filter(r => NOTE.includes(stOf(r)) && Date.now() - SAVED[r.id].t >= FOLLOW_MS);
+  const due = REMIND ? ROWS.filter(r => NOTE.includes(stOf(r)) && bizDays(SAVED[r.id].t) >= FOLLOW_DAYS) : [];
   const box = $('#followup');
   box.hidden = !due.length;
   if (!due.length) return;
   const ul = el('ul');
   for (const r of due) {
-    const days = Math.floor((Date.now() - SAVED[r.id].t) / 864e5), li = el('li');
+    const days = bizDays(SAVED[r.id].t), li = el('li');
     li.dataset.st = stOf(r);
-    li.append(link(`#nome=${encodeURIComponent(r.nome)}&estado=todos&vazias=1`, `${r.n} ${r.nome}`), el('span', '', ` · ${STATUS[stOf(r)]}, há ${days} dias`));
+    li.append(link(`#nome=${encodeURIComponent(r.nome)}&estado=todos&vazias=1`, `${r.n} ${r.nome}`), el('span', '', ` · ${STATUS[stOf(r)]}, há ${days} dias úteis`));
     ul.append(li);
   }
   box.replaceChildren(el('strong', '', `🔔 ${due.length} ${due.length > 1 ? 'entidades precisam' : 'entidade precisa'} de seguimento`), ul);
@@ -208,16 +219,23 @@ function update() {
   followUp();
   const q = { nome: norm(S.nome) };
   const list = sortRows(ROWS.filter(r => matches(r, q)));
-  const last = Math.max(1, Math.ceil(list.length / PAGE));
+  const last = Math.max(1, Math.ceil(list.length / S.pp));
   S.p = Math.min(Math.max(S.p, 1), last);
-  render(list.slice((S.p - 1) * PAGE, S.p * PAGE));
+  render(list.slice((S.p - 1) * S.pp, S.p * S.pp));
   renderCount(list, last);
   writeState();
 }
 
 form.addEventListener('input', () => { fromForm(); update(); });
+$('#pp').addEventListener('change', e => { S.pp = +e.target.value; S.p = 1; update(); });
 form.addEventListener('submit', e => e.preventDefault());
 form.addEventListener('reset', e => { e.preventDefault(); S = defaults(); toForm(); update(); });
+$('#remind').checked = REMIND;
+$('#remind').addEventListener('change', e => {
+  REMIND = e.target.checked;
+  try { localStorage.setItem('iq-remind', REMIND ? '1' : '0'); } catch { /* ignore */ }
+  update();
+});
 tbody.addEventListener('change', e => {
   const id = e.target.dataset.id;
   if (!id) return;
@@ -228,7 +246,7 @@ tbody.addEventListener('change', e => {
 if (new URLSearchParams(location.search).has('dev')) { // open index.html?dev to test the follow-up banner
   $('#dev').hidden = false;
   $('#dev button').onclick = () => {
-    for (const k in SAVED) SAVED[k].t -= FOLLOW_MS;
+    for (const k in SAVED) SAVED[k].t -= DEV_SHIFT;
     try { localStorage.setItem('iq-status', JSON.stringify(SAVED)); } catch { /* ignore */ }
     update();
   };

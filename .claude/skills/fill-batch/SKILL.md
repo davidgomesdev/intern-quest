@@ -25,10 +25,10 @@ grep -o '^<tr id="e[0-9]*"><td>⬜' index.html | sort -R | head -5 | grep -o '[0
 ## 2. Keep only dispatchable ids
 
 ```bash
-grep '^<tr id="eID"[ >]' index.html
+grep '^<tr id="eID"[ >]' index.html | cut -c1-80
 ```
 
-Drop, and report why, any id that has no match (unknown or `data-removed`) or is already `✅`. Adjacent rows are fine: commits are applied one after another on one branch.
+Drop, and report why, any id that has no match (unknown or `data-removed`) or is already `✅` (the first 80 chars show it). Adjacent rows are fine: commits are applied one after another on one branch.
 
 ## 3. Research (parallel)
 
@@ -43,9 +43,9 @@ One Agent call per id, all in the same message so they run in parallel, at most 
 - `model`: `haiku` (Haiku 5.5)
 - `effort`: `medium`
 - `description`: `Research eID`
-- `prompt`: `Use the fill-entity skill for entity ID. Repo: <absolute path of this repo>. OUT: <absolute OUT>.`
+- `prompt`: `Use the fill-entity skill for entity ID. Repo: <absolute path of this repo>. OUT: <absolute OUT>. Final reply: exactly one line, ok or FAILED: <reason>.`
 
-Give only those three things. The subagent reads the name itself.
+Give only those things. The subagent reads the name itself.
 
 ## 4. Apply (sequential, you)
 
@@ -58,20 +58,21 @@ git worktree add -b feat/fill-batch-<stamp> ../intern-quest-wt-fill-<stamp> orig
 cd ../intern-quest-wt-fill-<stamp>
 ```
 
-For each id whose subagent reported `ok` and whose `OUT/eID.json` exists, in ascending order:
-
-If the JSON has a `flags` array, the orchestrator records each flag in the row's Adicional before applying: prefix the joined flags with `Revisar: ` and append them after any existing `adicional` text, separated by `; `. Write this into the JSON's `adicional` field, never into the row by hand. Flags are review notes for a human; they do not stop the commit.
+One call applies every id, in ascending order:
 
 ```bash
-scripts/apply_row.py ID "$OUT/eID.json"   # builds the row from the JSON
-git diff --numstat          # must print exactly: 1  1  index.html
-scripts/check.py index.html
-git add index.html
-git commit -m "feat(data): fill eID"
-scripts/check.py --diff HEAD~1      # this commit only
+scripts/apply_batch.py "$OUT" 0001 0002 0003:"web search unavailable" ...
 ```
 
-If any step fails, run `git reset --hard HEAD` (drops that entity's half-done change, keeps earlier commits), record `FAILED: <reason>` for the id, and go on to the next. Do not hand-edit a bad row; `apply_row.py` is the only thing that writes one. No co-author trailers. Never use `--no-verify` or skip signing. If a hook or signing fails, stop the whole batch and report the exact error.
+Pass each dispatched id: bare if its subagent replied `ok`, `ID:reason` if it replied `FAILED: reason`. The script does the whole per-entity routine and prints one line per id (`eID ok` / `eID FAILED: reason`):
+
+- merges the JSON's `flags` into `adicional` as `Revisar: …` (review notes; they do not stop the commit),
+- `apply_row.py`, checks `git diff --numstat` is exactly `1  1  index.html`, `check.py index.html`, commit `feat(data): fill eID`, `check.py --diff HEAD~1`,
+- on any failure `git reset --hard HEAD` (keeps earlier commits) and goes on.
+
+It writes `OUT/body.md` (the PR `## Entities` list) and `OUT/report.tsv` (id, nome, result). Do not hand-edit a bad row; `apply_row.py` is the only thing that writes one. No co-author trailers, never `--no-verify` or skip signing. If a hook or signing fails the script exits 3 with the exact error: stop the whole batch and report it.
+
+Do not read the JSONs or `index.html` yourself.
 
 If no commit was made, remove the worktree and report; do not open a PR.
 
@@ -79,15 +80,10 @@ If no commit was made, remove the worktree and report; do not open a PR.
 
 ```bash
 git push -u origin feat/fill-batch-<stamp>
-gh pr create --title "feat(data): fill N entities" --body "<body>"
+gh pr create --title "feat(data): fill N entities" --body-file "$OUT/body.md"
 ```
 
-Body: a `## Entities` list with one line per entity you dispatched in step 3, written after every subagent has finished and step 4 is done:
-
-- committed: `- eID (NOME): ok, URL1, URL2` (URLs from the `sources` array of its JSON; `no sources found` if empty)
-- failed at any stage (subagent `FAILED`, missing JSON, `apply_row.py` or `check.py` error): `- eID (NOME): FAILED: <reason>`
-
-Nothing else per entity: no research notes, no skipped ids (those only go in the final report). Use `—` for NOME when the subagent never found a row.
+Body: `OUT/body.md`, as written by step 4 (`--body-file "$OUT/body.md"`). One line per dispatched entity, nothing else: no research notes, no skipped ids (those only go in the final report).
  GitHub calls can time out: retry a failed `push` or `gh` up to 3 times, waiting 10, 30, 60 seconds. If it still fails, stop and report the exact error; the worktree and branch stay for a human.
 
 ## 6. Wait for CI, merge
@@ -95,34 +91,16 @@ Nothing else per entity: no research notes, no skipped ids (those only go in the
 This skill overrides the global "never merge" rule: merge only after CI succeeds with no warnings or alerts.
 
 ```bash
-sleep 20   # let checks register
-gh pr checks --watch --fail-fast
+scripts/ci_merge.sh
 ```
 
-- Exit 0 (all pass): look for alerts before merging:
-
-  ```bash
-  SHA=$(git rev-parse HEAD)
-  # every check must be exactly "success" (neutral, skipped, etc. count as alerts)
-  gh api repos/{owner}/{repo}/commits/$SHA/check-runs --jq '.check_runs[] | select(.conclusion != "success") | .name'
-  # any warning/failure annotation on any check
-  for id in $(gh api repos/{owner}/{repo}/commits/$SHA/check-runs --jq '.check_runs[].id'); do
-    gh api repos/{owner}/{repo}/check-runs/$id/annotations --jq '.[] | select(.annotation_level != "notice") | "\(.annotation_level): \(.message)"'
-  done
-  # any review or comment on the PR
-  gh pr view --json comments,reviews --jq '(.comments | length) + (.reviews | length)'
-  ```
-
-  Any output from the first two, or a count above 0 from the third, is an alert: do not merge, report `alert, not merged <PR URL>: <first alert>`. Otherwise `gh pr merge --rebase` (keeps one commit per entity on `main`; no `--delete-branch`, the branch is checked out in the worktree, and the repo deletes it on merge).
-- Non-zero exit (a check failed): do not merge. Report `CI failed <PR URL>`.
-- "no checks reported" after a second attempt 30s later: do not merge. Report `no CI checks <PR URL>`.
-- Merge refused (conflict, branch protection): do not retry or bypass. Report `merge refused: <reason>`.
+It waits for checks, requires every check run to be `success` with no non-notice annotations and no PR comments/reviews, then `gh pr merge --rebase`. It prints one verdict line: `merged <URL>`, `CI failed <URL>`, `no CI checks <URL>`, `alert, not merged <URL>: <first alert>` or `merge refused: <reason>`. Never retry or bypass a refusal.
 
 Then clean up: `cd "$(git rev-parse --git-common-dir)/.." && git worktree remove ../intern-quest-wt-fill-<stamp>` (skip it when the PR was not merged, so a human can look).
 
 ## 7. Report
 
-One table, then the counts. A committed entity's result is the PR URL plus its merge state; the rest are the reasons recorded above:
+One table, then the counts. Rows come from `OUT/report.tsv`; a committed entity's result is the step 6 verdict line, the rest are the reasons recorded above:
 
 ```
 | id    | nome                          | result                                  |
@@ -133,7 +111,7 @@ One table, then the counts. A committed entity's result is the PR URL plus its m
 | e0009 | —                             | skipped: no row                         |
 ```
 
-Nome is the third `<td>` of the row from step 2 (copy it exactly). Use `—` only when the id has no row. If the PR did not merge (alert, CI failed, refused), every committed id shows `not merged <reason> <PR URL>`.
+Nome is in `report.tsv` (copied exactly from the row); ids dropped in step 2 use `—` when they have no row, else the third `<td>`. If the PR did not merge (alert, CI failed, refused), every committed id shows `not merged <reason> <PR URL>`.
 
 Then: `Remaining ⬜: ` + output of `grep -c '^<tr id="e[0-9]*"><td>⬜' index.html` run on the updated `main` checkout.
 

@@ -170,7 +170,9 @@ function enhance(r) {
   sel.setAttribute('aria-label', 'Estado de seguimento'); sel.dataset.id = r.id; r.sel = sel;
   for (const k in STATUS) sel.append(new Option(STATUS[k] + (NOTE.includes(k) ? ' 🔔' : ''), k));
   sel.title = '🔔 = lembrete de seguimento ao fim de 3 dias úteis';
-  td.setAttribute('role', 'cell'); td.append(sel); r.el.append(td);
+  const rep = link('mailto:opp-estagios@davidgomes.blog?subject=' + encodeURIComponent(`${r.el.id} – ${c[2].textContent}`) + '&body=' + encodeURIComponent('Descreve o erro nesta entidade:\n'), 'Reportar erro nesta entidade');
+  rep.className = 'rep';
+  td.setAttribute('role', 'cell'); td.append(sel, rep); r.el.append(td);
   r.done = true;
 }
 

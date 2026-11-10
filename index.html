@@ -52,6 +52,7 @@
       <label class="toggle"><input type="checkbox" name="st" value="entrevista"><span>Entrevista feita 🔔</span></label>
       <label class="toggle"><input type="checkbox" name="st" value="descartado"><span>Descartado</span></label>
     </div>
+    <label class="dica"><input type="checkbox" id="remind" checked><span><span aria-hidden="true">🔔</span> Lembretes: depois de 3 dias úteis sem mudares o estado, aparece um aviso para fazeres seguimento.</span></label>
   </fieldset>
   <div class="grupo">
     <fieldset class="campo">
@@ -71,6 +72,7 @@
 
 <div class="barra">
   <p id="count" aria-live="polite"></p>
+  <label class="pp">Por página <select id="pp"><option>10</option><option>20</option><option>50</option><option>100</option></select></label>
   <nav class="pager" aria-label="Paginação">
     <button type="button" data-p="prev" disabled>‹ Anterior</button>
     <span></span>

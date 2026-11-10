@@ -19,6 +19,7 @@
 <noscript><p class="semjs">Sem JavaScript vês todas as entidades, sem filtros nem ordenação. Usa a pesquisa do navegador (Ctrl+F).</p></noscript>
 
 <main>
+<aside id="followup" class="aviso" role="status" hidden></aside>
 <details id="painel" open>
 <summary>Filtros <span id="ativos"></span></summary>
 <form id="filters" role="search" aria-label="Filtrar entidades">
@@ -39,6 +40,17 @@
       <label class="toggle"><input type="checkbox" name="a" value="comunitaria"><span><span aria-hidden="true">🤝</span> Comunitária / Intervenção Social</span></label>
       <label class="toggle"><input type="checkbox" name="a" value="desporto"><span><span aria-hidden="true">🏅</span> Desporto</span></label>
       <label class="toggle"><input type="checkbox" name="a" value="desconhecido"><span><span aria-hidden="true">❔</span> Desconhecido</span></label>
+    </div>
+  </fieldset>
+  <fieldset>
+    <legend>Seguimento (qualquer um dos escolhidos)</legend>
+    <div class="opcoes">
+      <label class="toggle"><input type="checkbox" name="st" value="ver"><span>Por ver</span></label>
+      <label class="toggle"><input type="checkbox" name="st" value="visto"><span>Visto</span></label>
+      <label class="toggle"><input type="checkbox" name="st" value="contactar"><span>Por Contactar</span></label>
+      <label class="toggle"><input type="checkbox" name="st" value="email"><span>Contactado por e-mail 🔔</span></label>
+      <label class="toggle"><input type="checkbox" name="st" value="entrevista"><span>Entrevista feita 🔔</span></label>
+      <label class="toggle"><input type="checkbox" name="st" value="consultado"><span>Já consultado</span></label>
     </div>
   </fieldset>
   <div class="grupo">
@@ -86,6 +98,7 @@
 <th role="columnheader" scope="col" class="nosort">Website</th>
 <th role="columnheader" scope="col" class="nosort">E-mail</th>
 <th role="columnheader" scope="col" class="nosort">Telefone</th>
+<th role="columnheader" scope="col" class="nosort">Seguimento</th>
 </tr></thead>
 <tbody id="rows" role="rowgroup">
 <tr id="e0001" data-src="https://24noticias.sapo.pt/atualidade/artigos/nao-sabem-o-dia-em-que-fazem-anos-ou-em-que-estacao-do-ano-estao-na-casa-da-praia-aprendem-a-ultrapassar-o-que-as-trouxe-ate-ali https://revistas.rcaap.pt/interaccoes/article/view/25109"><td>✅</td><td>0001</td><td>Centro Doutor João dos Santos - Casa da Praia (IPSS)</td><td>Lisboa</td><td>Lisboa</td><td>Travessa da Praia</td><td>clinica educacao</td><td>Pedagogia Terapêutica; apoio a crianças com dificuldades de aprendizagem e saúde mental infantil</td><td><i>indisponível</i></td><td><i>indisponível</i></td><td><i>indisponível</i></td></tr>

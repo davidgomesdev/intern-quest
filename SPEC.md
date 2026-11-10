@@ -1,4 +1,4 @@
-# Intern Quest: SPEC (functional)
+# Abre Portas: SPEC (functional)
 
 Status: FINAL (functional). Visual/technical design still to be done. Nothing is implemented. Items marked **[CALL]** are my decisions, not yours; please check them.
 

@@ -1,6 +1,6 @@
 'use strict';
 document.documentElement.classList.add('js'); // CSS hides the raw rows only while this script is running
-// Intern Quest: filter, sort and page the raw <tr> lines of index.html. State lives in the URL hash.
+// Abre Portas: filter, sort and page the raw <tr> lines of index.html. State lives in the URL hash.
 const PAGE = 50;
 const AREAS = { // slug -> [emoji, label]; one place for both
   clinica: ['🩺', 'Clínica e da Saúde'], neuropsicologia: ['🧠', 'Neuropsicologia'], psicoterapia: ['💬', 'Psicoterapia'],

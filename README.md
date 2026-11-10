@@ -1,4 +1,4 @@
-# intern-quest
+# Abre Portas
 
 A static page listing the 6,345 entities in the OPP (Ordem dos Psicólogos Portugueses) psychology-internship list. It is a sortable, filterable table, one `<tr>` per entity in `index.html`. AI subagents fill the contact details one row per pull request.
 

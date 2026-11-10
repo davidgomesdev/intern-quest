@@ -58,7 +58,8 @@ function buildOptions() {
 function fillLocais(d) { // Local depends on Distrito
   const c = form.elements.c;
   c.length = 1; c.disabled = !d; c.options[0].text = d ? 'Todos' : 'Escolhe o distrito';
-  c.append(...[...(LOC[d] || [])].sort(COLL.compare).map(v => new Option(v)));
+  const n = {}; ROWS.forEach(r => { if (!r.removed && r.local) n[r.local] = (n[r.local] || 0) + 1; });
+  c.append(...[...(LOC[d] || [])].sort(COLL.compare).map(v => new Option(`${v} (${n[v] || 0})`, v)));
 }
 
 function readState() {

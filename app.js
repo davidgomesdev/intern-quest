@@ -15,6 +15,21 @@ let SAVED = {}; // entity id -> { s: status, t: ms when set }; persisted in loca
 try { SAVED = JSON.parse(localStorage.getItem('iq-status')) || {}; } catch { /* no storage: statuses last this visit only */ }
 let REMIND = true; // follow-up reminders on/off, per browser
 try { REMIND = localStorage.getItem('iq-remind') !== '0'; } catch { /* no storage: on */ }
+// Custom lists, per browser: list name -> Map(entity id -> note). Maps, so names and ids from imports or links never touch Object.prototype.
+const LIST_MAX = 40, NOTE_MAX = 500;
+let LST = new Map(), SHARE = null, PICK = ''; // SHARE: a list received in a link, waiting to be saved; PICK: entity open in the picker
+const ser = () => [...LST].map(([n, m]) => [n, [...m]]); // the storage / backup-file shape
+function saveLists() { try { localStorage.setItem('iq-lists', JSON.stringify(ser())); } catch { /* storage full or blocked */ } }
+function mergeLists(data) { // data has the ser() shape; throws if it does not
+  for (const [name, items] of data) {
+    const k = String(name).trim().slice(0, LIST_MAX);
+    if (!k) continue;
+    const m = LST.get(k) || new Map();
+    LST.set(k, m);
+    for (const [id, note] of items) if (/^e\d{4,}$/.test(id) && !m.get(id)) m.set(id, String(note ?? '').slice(0, NOTE_MAX));
+  }
+}
+try { mergeLists(JSON.parse(localStorage.getItem('iq-lists') || '[]')); } catch { /* no storage or corrupt: keep what parsed */ }
 function bizDays(t) { // Mon-Fri days from the day after t up to today
   let n = 0;
   const end = new Date().setHours(0, 0, 0, 0);
@@ -29,11 +44,11 @@ const KEY = { // sortable column -> value; null = missing, sorts last in both di
 const COLL = new Intl.Collator('pt', { sensitivity: 'base', numeric: true });
 const $ = s => document.querySelector(s);
 const form = $('#filters'), tbody = $('#rows');
-let ROWS = [], TOTAL = 0, S;
+let ROWS = [], BYID = new Map(), TOTAL = 0, S;
 const LOC = {}; // distrito -> Set of locais (from lookup/, embedded in index.html): Local only lists the chosen distrito's
 
 const norm = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();
-const defaults = () => ({ nome: '', c: '', d: '', a: [], st: [], estado: 'ok', vazias: false, contacto: false, ord: 'n', dir: 'asc', p: 1, pp: PP });
+const defaults = () => ({ nome: '', c: '', d: '', a: [], st: [], l: '', estado: 'ok', vazias: false, contacto: false, ord: 'n', dir: 'asc', p: 1, pp: PP });
 const FLAGS = ['vazias', 'contacto']; // on/off filters: stored as "1" in the hash, absent when off
 
 function parse() {
@@ -44,8 +59,10 @@ function parse() {
     return { el, id: el.id, n: +c[1].textContent, ok: c[0].textContent === '✅', removed: 'removed' in el.dataset,
       empty: Array.from(c).slice(3, 11).every(miss),
       nome: c[2].textContent, local: val(3), distrito: val(4), dUnk: !!c[4].firstElementChild, areas,
-      kNome: norm(c[2].textContent), contacto: !!(val(8) || val(9) || val(10)), done: false };
+      kNome: norm(c[2].textContent), contacto: !!(val(8) || val(9) || val(10)), done: false,
+      morada: val(5), site: val(8), email: val(9), tel: val(10) }; // raw text, kept for list exports
   });
+  BYID = new Map(ROWS.map(r => [r.id, r]));
   TOTAL = ROWS.filter(r => !r.removed).length;
 }
 
@@ -64,11 +81,12 @@ function fillLocais(d) { // Local depends on Distrito
 
 function readState() {
   const q = new URLSearchParams(location.hash.slice(1)), g = k => q.get(k) || '';
-  S = { ...defaults(), nome: g('nome'), c: g('c'), d: g('d'),
+  S = { ...defaults(), nome: g('nome'), c: g('c'), d: g('d'), l: LST.has(g('l')) ? g('l') : '',
     a: g('a').split(',').filter(k => Object.hasOwn(AREAS, k)), st: g('st').split(',').filter(k => Object.hasOwn(STATUS, k)), vazias: g('vazias') === '1', contacto: g('contacto') === '1',
     estado: ['todos', 'todo'].includes(g('estado')) ? g('estado') : 'ok',
     ord: Object.hasOwn(KEY, g('ord')) ? g('ord') : 'n', dir: g('dir') === 'desc' ? 'desc' : 'asc', p: parseInt(g('p'), 10) || 1,
     pp: SIZES.includes(+g('pp')) ? +g('pp') : PP };
+  SHARE = parseShare(g('share'));
   if (S.c && !S.d) S.d = Object.keys(LOC).find(d => LOC[d].has(S.c)) || ''; // old links: c= alone // old links: c= alone
   toForm();
   S.c = form.elements.c.value; S.d = form.elements.d.value; // drop values that are not in the lists
@@ -80,6 +98,7 @@ function writeState() {
     const v = LISTS.includes(k) ? S[k].join(',') : FLAGS.includes(k) ? (S[k] ? '1' : '') : S[k];
     if (v !== (LISTS.includes(k) || FLAGS.includes(k) ? '' : D[k])) q.set(k, v);
   }
+  if (SHARE) q.set('share', SHARE.raw); // keep a pending shared list in the URL until it is saved or ignored
   const h = q.toString().replace(/%2C/g, ',');
   history.replaceState(null, '', location.pathname + location.search + (h && '#' + h));
 }
@@ -104,8 +123,9 @@ function matches(r, q) {
       : !S.d || (S.d === 'desconhecido' ? r.dUnk : r.distrito === S.d || !!LOC[S.d]?.has(r.local)))
     && (!S.st.length || S.st.includes(stOf(r)))
     && (!S.a.length || S.a.some(a => r.areas.includes(a)))
-    && (S.estado === 'todos' || r.ok === (S.estado === 'ok'))
-    && !r.removed && (S.vazias || !(r.ok && r.empty)) && (!S.contacto || r.contacto);
+    && (S.l ? LST.get(S.l).has(r.id) // inside a list every member shows, filled or not
+      : (S.estado === 'todos' || r.ok === (S.estado === 'ok')) && (S.vazias || !(r.ok && r.empty)))
+    && !r.removed && (!S.contacto || r.contacto);
 }
 
 function sortRows(list) {
@@ -175,6 +195,8 @@ function enhance(r) {
   rep.onclick = () => { location.href = mail; };
   c[1].append(' ', rep);
   td.setAttribute('role', 'cell'); td.append(sel); r.el.append(td);
+  r.tl = el('td'); r.tn = el('td'); // lists: ★ button (+ ✕ inside a list); note (inside a list). Filled by listCell()
+  r.tl.setAttribute('role', 'cell'); r.tn.setAttribute('role', 'cell'); r.el.append(r.tl, r.tn);
   r.done = true;
 }
 
@@ -182,13 +204,14 @@ function render(slice) {
   slice.forEach(r => {
     r.done || enhance(r);
     r.el.dataset.st = r.sel.dataset.st = r.sel.value = stOf(r); // colours the card and the pill
+    listCell(r);
   });
   tbody.replaceChildren(...slice.map(r => r.el));
   tbody.classList.add('ready');
 }
 
 function renderCount(list, last) {
-  const total = TOTAL, filled = list.filter(r => r.ok).length;
+  const total = S.l ? LST.get(S.l).size : TOTAL, filled = list.filter(r => r.ok).length;
   $('#count').replaceChildren(el('strong', '', list.length), ` de ${total} entidades, ${filled} com dados`);
   document.querySelectorAll('.pager').forEach(p => {
     p.querySelector('span').textContent = `Página ${S.p} de ${last}`;
@@ -197,7 +220,9 @@ function renderCount(list, last) {
   });
   const active = (S.nome ? 1 : 0) + (S.c || S.d ? 1 : 0) + S.a.length + S.st.length + (S.estado !== 'ok') + S.vazias + S.contacto;
   $('#ativos').textContent = active ? `(${active} ${active > 1 ? 'ativos' : 'ativo'})` : '';
-  $('#vazio').hidden = list.length > 0;
+  const bare = !!S.l && !LST.get(S.l).size; // a list with nothing in it gets its own message
+  $('#vazio').hidden = list.length > 0 || bare;
+  $('#lista-vazia').hidden = !bare;
   $('.tabela').hidden = list.length === 0;
   document.querySelectorAll('th[data-k]').forEach(th => {
     if (th.dataset.k === S.ord) th.setAttribute('aria-sort', S.dir === 'desc' ? 'descending' : 'ascending');
@@ -233,6 +258,8 @@ function stCounts() { // chips show how many entities sit in each status
 function update() {
   followUp();
   stCounts();
+  shareBanner();
+  renderTabs();
   const q = { nome: norm(S.nome) };
   const list = sortRows(ROWS.filter(r => matches(r, q)));
   const last = Math.max(1, Math.ceil(list.length / S.pp));
@@ -245,7 +272,7 @@ function update() {
 form.addEventListener('input', () => { fromForm(); update(); });
 $('#pp').addEventListener('change', e => { S.pp = +e.target.value; S.p = 1; update(); });
 form.addEventListener('submit', e => e.preventDefault());
-form.addEventListener('reset', e => { e.preventDefault(); S = defaults(); toForm(); update(); });
+form.addEventListener('reset', e => { e.preventDefault(); S = { ...defaults(), l: S.l }; toForm(); update(); }); // clearing filters keeps the open list
 $('#remind').checked = REMIND;
 $('#remind').addEventListener('change', e => {
   REMIND = e.target.checked;
@@ -274,6 +301,144 @@ if (new URLSearchParams(location.search).has('dev')) { // open index.html?dev to
     update();
   };
 }
+// ---------- Custom lists ----------
+const inLists = r => [...LST].filter(([, m]) => m.has(r.id)).map(([n]) => n);
+const members = () => [...LST.get(S.l).keys()].map(id => BYID.get(id)).filter(r => r && !r.removed).sort((a, b) => a.n - b.n);
+const emails = () => [...new Set(members().map(r => r.email).filter(Boolean))];
+const slug = () => norm(S.l).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'lista';
+
+function addList(name) { // creates the list if new; returns its trimmed name, '' if there is none
+  const k = (name || '').trim().slice(0, LIST_MAX);
+  if (k && !LST.has(k)) { LST.set(k, new Map()); saveLists(); }
+  return k;
+}
+
+function parseShare(raw) { // "Name:0001,0002" -> { name, ids, raw }, keeping only entities that exist here
+  const i = raw.lastIndexOf(':'), name = raw.slice(0, i).trim().slice(0, LIST_MAX);
+  const ids = [...new Set(raw.slice(i + 1).split(',').map(x => 'e' + x).filter(id => /^e\d{4,}$/.test(id) && BYID.has(id)))];
+  return i > 0 && name && ids.length ? { name, ids, raw } : null;
+}
+
+function shareBanner() {
+  const b = $('#partilha');
+  b.hidden = !SHARE;
+  if (!SHARE) return;
+  const btn = (act, text) => { const x = el('button', '', text); x.type = 'button'; x.dataset.act = act; return x; };
+  b.replaceChildren(el('strong', '', `📥 Lista partilhada «${SHARE.name}»`), el('span', '', ` · ${SHARE.ids.length} entidades `), btn('shsave', 'Guardar'), btn('shskip', 'Ignorar'));
+}
+
+function renderTabs() {
+  const tab = (label, l, n) => {
+    const b = el('button', 'tab', label);
+    b.type = 'button'; b.dataset.act = 'tab'; b.dataset.l = l; b.setAttribute('aria-pressed', l === S.l);
+    if (n != null) b.append(el('span', 'n', n));
+    return b;
+  };
+  const add = el('button', 'tab nova', '+ Nova lista');
+  add.type = 'button'; add.dataset.act = 'new';
+  $('#listas').replaceChildren(tab('Todas', ''), ...[...LST].map(([n, m]) => tab(n, n, m.size)), add);
+  $('#listas').hidden = $('#backup').hidden = false;
+  $('#lista-acoes').hidden = !S.l;
+  if (S.l) {
+    const eb = $('[data-act=emails]'), n = emails().length;
+    eb.textContent = `Copiar e-mails (${n})`; eb.disabled = !n;
+  }
+}
+
+function listCell(r) { // ★ opens the picker; inside a list the row also gets ✕ (remove) and a note
+  const mine = inLists(r), btn = (cls, text, act, label) => {
+    const b = el('button', cls, text);
+    b.type = 'button'; b.dataset.act = act; b.dataset.r = r.id; b.title = label; b.setAttribute('aria-label', label);
+    return b;
+  };
+  r.tl.replaceChildren(btn('lst-btn' + (mine.length ? ' on' : ''), mine.length ? '★' : '☆', 'pick',
+    mine.length ? `Listas de ${r.nome}: ${mine.join(', ')}` : `Juntar ${r.nome} a uma lista`));
+  r.tn.replaceChildren();
+  if (!S.l) return;
+  r.tl.prepend(btn('lst-rm', '✕', 'rm', `Tirar ${r.nome} da lista ${S.l}`));
+  const note = el('input', 'nota');
+  note.type = 'text'; note.maxLength = NOTE_MAX; note.placeholder = 'Nota…'; note.value = LST.get(S.l).get(r.id) ?? '';
+  note.dataset.r = r.id; note.setAttribute('aria-label', `Nota sobre ${r.nome}`);
+  r.tn.append(note);
+}
+
+function fillPick() { // the picker dialog: one checkbox per list for the entity in PICK
+  $('#pick-t').textContent = `Listas · ${BYID.get(PICK).nome}`;
+  $('#pick-l').replaceChildren(...(LST.size ? [...LST].map(([n, m]) => {
+    const lab = el('label', 'toggle'), cb = el('input');
+    cb.type = 'checkbox'; cb.checked = m.has(PICK); cb.dataset.n = n;
+    lab.append(cb, el('span', '', n));
+    return lab;
+  }) : [el('p', '', 'Ainda não tens listas. Cria a primeira aqui em baixo.')]));
+}
+
+function copy(btn, text) {
+  const label = btn.textContent;
+  (navigator.clipboard?.writeText(text) ?? Promise.reject()).then(() => {
+    btn.textContent = 'Copiado ✓';
+    setTimeout(() => { btn.textContent = label; }, 1500);
+  }, () => prompt('Copia daqui:', text)); // no clipboard access (insecure page, denied): show the text instead
+}
+
+function download(name, text, type) {
+  const a = el('a');
+  a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1e4);
+}
+
+const ACT = { // every [data-act] button
+  tab: b => { S.l = b.dataset.l; S.p = 1; update(); },
+  new: () => { const k = addList(prompt('Nome da nova lista')); if (k) { S.l = k; S.p = 1; update(); } },
+  pick: b => { PICK = b.dataset.r; fillPick(); $('#pick').showModal(); },
+  padd: () => { // create a list from the picker and put the entity in it
+    const k = addList($('#pick-n').value);
+    if (!k) return;
+    if (!LST.get(k).has(PICK)) LST.get(k).set(PICK, '');
+    $('#pick-n').value = ''; saveLists(); fillPick(); update();
+  },
+  rm: b => { LST.get(S.l).delete(b.dataset.r); saveLists(); update(); },
+  emails: b => copy(b, emails().join('; ')),
+  link: b => copy(b, location.href.replace(/#.*/, '') + '#' + new URLSearchParams({ share: S.l + ':' + members().map(r => r.id.slice(1)) }).toString().replace(/%2C/g, ',')),
+  csv: () => {
+    // ponytail: ';' separator because pt-PT Excel expects it (Sheets detects either)
+    const cell = v => { v = String(v ?? ''); return '"' + (/^[=+\-@\t\r]/.test(v) ? "'" : '') + v.replace(/"/g, '""') + '"'; }; // a leading = + - @ gets a ' so spreadsheets do not run it as a formula
+    const rows = members().map(r => [r.n, r.nome, r.local, r.distrito, r.morada, r.email, r.tel?.replace(/^\+351 /, ''), r.site, STATUS[stOf(r)], LST.get(S.l).get(r.id)]);
+    download(slug() + '.csv', '﻿' + [['Nº', 'Nome', 'Local', 'Distrito', 'Morada', 'E-mail', 'Telefone', 'Website', 'Seguimento', 'Nota'], ...rows]
+      .map(x => x.map(cell).join(';')).join('\r\n'), 'text/csv;charset=utf-8');
+  },
+  del: () => {
+    if (!confirm(`Apagar a lista «${S.l}»? As entidades não são apagadas.`)) return;
+    LST.delete(S.l); S.l = ''; saveLists(); update();
+  },
+  shsave: () => { // a shared list joins the list of the same name, or becomes a new one
+    const m = LST.get(SHARE.name) || new Map();
+    for (const id of SHARE.ids) if (!m.has(id)) m.set(id, '');
+    LST.set(SHARE.name, m); S.l = SHARE.name; S.p = 1; SHARE = null; saveLists(); update();
+  },
+  shskip: () => { SHARE = null; update(); },
+  exp: () => download('abre-portas-listas.json', JSON.stringify(ser()), 'application/json'),
+  imp: () => $('#imp-f').click(),
+};
+document.addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b) ACT[b.dataset.act](b); });
+$('#pick-l').addEventListener('change', e => {
+  const m = LST.get(e.target.dataset.n);
+  if (e.target.checked) m.set(PICK, m.get(PICK) ?? ''); else m.delete(PICK);
+  saveLists(); update();
+});
+$('#pick-n').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); ACT.padd(); } });
+$('#pick').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.close(); }); // click on the backdrop
+$('#pick').addEventListener('close', () => BYID.get(PICK)?.tl?.querySelector('.lst-btn')?.focus()); // update() rebuilt the button: give focus back
+tbody.addEventListener('input', e => { // note inside a list: saved as you type
+  if (e.target.classList.contains('nota')) { LST.get(S.l).set(e.target.dataset.r, e.target.value.slice(0, NOTE_MAX)); saveLists(); }
+});
+$('#imp-f').addEventListener('change', async e => {
+  const f = e.target.files[0];
+  e.target.value = '';
+  if (!f) return;
+  try { mergeLists(JSON.parse(await f.text())); saveLists(); update(); alert('Listas importadas.'); }
+  catch { alert('Ficheiro inválido. Usa um ficheiro exportado daqui.'); }
+});
+
 $('thead').addEventListener('click', e => {
   const th = e.target.closest('th[data-k]');
   if (!th) return;

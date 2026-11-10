@@ -255,6 +255,13 @@ tbody.addEventListener('change', e => {
   try { localStorage.setItem('iq-status', JSON.stringify(SAVED)); } catch { /* storage full or blocked */ }
   update();
 });
+tbody.addEventListener('click', e => { // opening a website, e-mail or phone marks a "Por ver" entity as Visto
+  const a = e.target.closest('td a'), id = a?.closest('tr')?.querySelector('select')?.dataset.id;
+  if (!id || ![8, 9, 10].includes(a.closest('td').cellIndex) || SAVED[id]) return;
+  SAVED[id] = { s: 'visto', t: Date.now() };
+  try { localStorage.setItem('iq-status', JSON.stringify(SAVED)); } catch { /* storage full or blocked */ }
+  update();
+});
 if (new URLSearchParams(location.search).has('dev')) { // open index.html?dev to test the follow-up banner
   $('#dev').hidden = false;
   $('#dev button').onclick = () => {

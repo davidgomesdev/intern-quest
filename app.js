@@ -22,6 +22,7 @@ const COLL = new Intl.Collator('pt', { sensitivity: 'base', numeric: true });
 const $ = s => document.querySelector(s);
 const form = $('#filters'), tbody = $('#rows');
 let ROWS = [], TOTAL = 0, S;
+const LOC = {}; // distrito -> Set of locais (from lookup/, embedded in index.html): Local only lists the chosen distrito's
 
 const norm = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();
 const defaults = () => ({ nome: '', c: '', d: '', a: [], st: [], estado: 'ok', vazias: false, contacto: false, ord: 'n', dir: 'asc', p: 1 });
@@ -42,8 +43,14 @@ function parse() {
 
 function buildOptions() {
   const distinct = k => [...new Set(ROWS.map(r => r[k]).filter(Boolean))].sort(COLL.compare);
-  form.elements.c.append(...distinct('local').map(v => new Option(v)));
+  for (const [d, ls] of Object.entries(JSON.parse($('#lookup').textContent))) LOC[d] = new Set(ls);
   form.elements.d.options[1].before(...distinct('distrito').map(v => new Option(v)));
+}
+
+function fillLocais(d) { // Local depends on Distrito
+  const c = form.elements.c;
+  c.length = 1; c.disabled = !d; c.options[0].text = d ? 'Todos' : 'Escolhe o distrito';
+  c.append(...[...(LOC[d] || [])].sort(COLL.compare).map(v => new Option(v)));
 }
 
 function readState() {
@@ -52,6 +59,7 @@ function readState() {
     a: g('a').split(',').filter(k => Object.hasOwn(AREAS, k)), st: g('st').split(',').filter(k => Object.hasOwn(STATUS, k)), vazias: g('vazias') === '1', contacto: g('contacto') === '1',
     estado: ['todos', 'todo'].includes(g('estado')) ? g('estado') : 'ok',
     ord: Object.hasOwn(KEY, g('ord')) ? g('ord') : 'n', dir: g('dir') === 'desc' ? 'desc' : 'asc', p: parseInt(g('p'), 10) || 1 };
+  if (S.c && !S.d) S.d = Object.keys(LOC).find(d => LOC[d].has(S.c)) || ''; // old links: c= alone // old links: c= alone
   toForm();
   S.c = form.elements.c.value; S.d = form.elements.d.value; // drop values that are not in the lists
 }
@@ -68,20 +76,21 @@ function writeState() {
 
 function toForm() {
   const f = form.elements;
-  f.nome.value = S.nome; f.c.value = S.c; f.d.value = S.d; f.estado.value = S.estado; f.vazias.checked = S.vazias; f.contacto.checked = S.contacto;
+  f.nome.value = S.nome; f.d.value = S.d; fillLocais(S.d); f.c.value = S.c; f.estado.value = S.estado; f.vazias.checked = S.vazias; f.contacto.checked = S.contacto;
   form.querySelectorAll('[name=a],[name=st]').forEach(i => { i.checked = S[i.name].includes(i.value); });
 }
 
 function fromForm() {
   const f = form.elements;
+  if (f.d.value !== S.d) fillLocais(f.d.value); // resets Local
   Object.assign(S, { nome: f.nome.value, c: f.c.value, d: f.d.value, estado: f.estado.value, vazias: f.vazias.checked, contacto: f.contacto.checked,
     a: Array.from(form.querySelectorAll('[name=a]:checked'), i => i.value),
     st: Array.from(form.querySelectorAll('[name=st]:checked'), i => i.value), p: 1 });
 }
 
 function matches(r, q) {
-  return r.kNome.includes(q.nome) && (!S.c || r.local === S.c)
-    && (!S.d || (S.d === 'desconhecido' ? r.dUnk : r.distrito === S.d))
+  return r.kNome.includes(q.nome) && (S.c ? r.local === S.c // a chosen Local wins: its row may lack a Distrito (scrape failure)
+      : !S.d || (S.d === 'desconhecido' ? r.dUnk : r.distrito === S.d || !!LOC[S.d]?.has(r.local)))
     && (!S.st.length || S.st.includes(stOf(r)))
     && (!S.a.length || S.a.some(a => r.areas.includes(a)))
     && (S.estado === 'todos' || r.ok === (S.estado === 'ok'))
@@ -131,6 +140,10 @@ function enhance(r) {
     box.append(el('strong', null, 'Fontes'), ...src.split(' ').map(u => link(u, u.replace(/^https?:\/\/(www\.)?/, ''), true)));
     d.append(sm, box); c[0].replaceChildren(d);
   } else c[0].replaceChildren(st);
+  if (r.local && r.distrito && !LOC[r.distrito]?.has(r.local)) { // Local belongs to another Distrito
+    const home = Object.keys(LOC).filter(d => LOC[d].has(r.local));
+    if (home.length) c[4].append(el('span', 'conf', `⚠ ${r.local} fica em ${home.join(' ou ')}, não em ${r.distrito}`));
+  }
   if (has(c[6])) {
     const w = el('span', 'areas');
     for (const k of r.areas) {
@@ -166,7 +179,7 @@ function renderCount(list, last) {
     p.querySelector('[data-p=prev]').disabled = S.p <= 1;
     p.querySelector('[data-p=next]').disabled = S.p >= last;
   });
-  const active = [S.nome, S.c, S.d].filter(Boolean).length + S.a.length + S.st.length + (S.estado !== 'ok') + S.vazias + S.contacto;
+  const active = (S.nome ? 1 : 0) + (S.c || S.d ? 1 : 0) + S.a.length + S.st.length + (S.estado !== 'ok') + S.vazias + S.contacto;
   $('#ativos').textContent = active ? `(${active} ${active > 1 ? 'ativos' : 'ativo'})` : '';
   $('#vazio').hidden = list.length > 0;
   $('.tabela').hidden = list.length === 0;

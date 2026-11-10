@@ -26,6 +26,7 @@ apply_row = load("apply_row")
 
 TD = lambda *c: "".join(f"<td>{x}</td>" for x in c)
 IND, DESC = "<i>indisponível</i>", "<i>desconhecido</i>"
+DESC_TD = f"<td>{DESC}</td>"  # a whole cell with an unknown Distrito
 
 
 def row(cells, id_="e0001", attr=""):
@@ -414,6 +415,12 @@ def test_head_sets_js_class_before_css():
     assert i < j and head.rindex("<script", 0, i) > head.index("<head>") and "setTimeout" in head[i:j]
 
 
+def test_lookup_embedded():
+    embed = load("embed_lookup")
+    with open(SHELL, encoding="utf-8") as f:
+        assert embed.line() in f.read().split("\n"), "index.html lookup is stale: run scripts/embed_lookup.py"
+
+
 def test_page():
     chrome = _chrome()
     if not chrome:
@@ -511,6 +518,14 @@ def test_page():
         assert _count(dom).startswith("10 de 120") and _pager(dom) == "Página 1 de 1"
         assert _count(big("c=Vila%20do%20Conde")).startswith("30 de 120")
         assert _count(big("d=Porto")).startswith("60 de 120")
+        clone = lambda i: fixture[0].replace('id="e0001"', f'id="e000{i}"').replace("<td>0001</td>", f"<td>000{i}</td>")
+        orphan = clone(7).replace("<td>Lisboa</td>", DESC_TD, 1)  # Cascais with no Distrito (scrape failure)
+        clash = clone(8).replace("<td>Lisboa</td>", "<td>Porto</td>", 1)  # Cascais with Distrito Porto
+        assert orphan != fixture[0] and clash != fixture[0]
+        orph = Page(chrome, tmp, fixture + [orphan, clash]).dump
+        assert set(_ids(orph(ALL + "d=Lisboa"))) == {"e0001", "e0003", "e0007", "e0008"}  # Local Todos: Distrito OR a Lisboa local
+        assert set(_ids(orph(ALL + "d=Lisboa&c=Cascais"))) == {"e0001", "e0007", "e0008"}  # chosen Local wins
+        assert orph(ALL).count("Cascais fica em Lisboa, não em Porto") == 1  # warning only on the conflicting row
         bad_url = fixture[0].replace("https://www.alfa.example", "https://a:99999")
         assert bad_url != fixture[0]
         dom = Page(chrome, tmp, [bad_url] + fixture[1:]).dump()

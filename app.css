@@ -205,19 +205,19 @@ th.nosort{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0
   box-shadow: 0 4px 16px rgb(0 0 0 / 0.18); font-size: 13.5px; line-height: 1.4; font-weight: 400; overflow-wrap: anywhere; }
 
 /* ---------- Follow-up status ---------- */
-:root { --st-ver: #8e8780; --st-visto: #3b82f6; --st-contactar: #d98a00; --st-email: #8b5cf6; --st-entrevista: #16a34a; --st-consultado: #0d9488; }
+:root { --st-ver: #8e8780; --st-visto: #3b82f6; --st-contactar: #d98a00; --st-email: #8b5cf6; --st-entrevista: #16a34a; --st-descartado: #0d9488; }
 [data-st="ver"],
 [data-st="visto"],
 [data-st="contactar"],
 [data-st="email"],
 [data-st="entrevista"],
-[data-st="consultado"] { --sc: var(--st-ver); }
+[data-st="descartado"] { --sc: var(--st-ver); }
 [data-st="ver"], input[name=st][value=ver] + span { --sc: var(--st-ver); }
 [data-st="visto"], input[name=st][value=visto] + span { --sc: var(--st-visto); }
 [data-st="contactar"], input[name=st][value=contactar] + span { --sc: var(--st-contactar); }
 [data-st="email"], input[name=st][value=email] + span { --sc: var(--st-email); }
 [data-st="entrevista"], input[name=st][value=entrevista] + span { --sc: var(--st-entrevista); }
-[data-st="consultado"], input[name=st][value=consultado] + span { --sc: var(--st-consultado); }
+[data-st="descartado"], input[name=st][value=descartado] + span { --sc: var(--st-descartado); }
 
 /* status pill (row) */
 td:nth-child(12) { grid-column: 4; grid-row: 5; justify-self: end; align-self: end; padding-left: var(--s4); }

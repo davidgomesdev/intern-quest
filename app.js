@@ -216,8 +216,19 @@ function followUp() { // banner: note statuses set 5+ days ago
   box.replaceChildren(el('strong', '', `🔔 ${due.length} ${due.length > 1 ? 'entidades precisam' : 'entidade precisa'} de seguimento`), ul);
 }
 
+function stCounts() { // chips show how many entities sit in each status
+  const n = {};
+  for (const r of ROWS) if (!r.removed) n[stOf(r)] = (n[stOf(r)] || 0) + 1;
+  form.querySelectorAll('[name=st]').forEach(i => {
+    const s = i.nextElementSibling;
+    s.dataset.base ??= s.textContent;
+    s.textContent = `${s.dataset.base.replace(' 🔔', '')} (${n[i.value] || 0})${s.dataset.base.includes('🔔') ? ' 🔔' : ''}`;
+  });
+}
+
 function update() {
   followUp();
+  stCounts();
   const q = { nome: norm(S.nome) };
   const list = sortRows(ROWS.filter(r => matches(r, q)));
   const last = Math.max(1, Math.ceil(list.length / S.pp));

@@ -1,4 +1,4 @@
-# Intern Quest: visual design (revision 3)
+# Abre Portas: visual design (revision 3)
 
 Mockup: `docs/mockup/index.html` + `app.css` (copy `app.css` as is). Rows are raw SPEC §5 lines; the inline script's `enhance()` builds the exact DOM `app.js` must produce. The rest of the script only toggles visual state. Screenshots in `shots/`: `1280-light.png`, `1280-dark.png`, `390-light.png`, and `390-dark-vazio.png` (empty result).
 

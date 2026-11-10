@@ -1,4 +1,4 @@
-# Intern Quest: DESIGN (visual + technical)
+# Abre Portas: DESIGN (visual + technical)
 
 Status: APPROVED (D1-D5 accepted as recommended). Visual design is superseded by `docs/mockup/` (see `DESIGN-VISUAL.md`); page size is 50 and only Estado, Nº, Nome, Cidade, Distrito and Áreas are sortable (SPEC §6.1, §6.4). SPEC.md is authoritative; where this doc and the spec disagree, the spec wins and the gap is listed in §9.
 Principle: the laziest thing that works. Python stdlib for scripts, plain DOM APIs in the browser, no dependencies, no build.
@@ -30,7 +30,7 @@ Why:
 ```html
 <!doctype html><html lang="pt-PT"><head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Intern Quest · Estágios de Psicologia</title>
+  <title>Abre Portas · Estágios de Psicologia</title>
   <script>/* adds class js, with a 4 s failsafe */</script>
   <link rel="stylesheet" href="app.css"><script src="app.js" defer></script>
 </head><body>
@@ -172,7 +172,7 @@ Desktop wireframe:
 
 ```
 +----------------------------------------------------------------------------------+
-| Intern Quest  Entidades de estágio (Ano Profissional Júnior) · OPP               |
+| Abre Portas  Entidades de estágio (Ano Profissional Júnior) · OPP               |
 | ! Lista informativa da OPP: não implica vaga. Dados recolhidos automaticamente,  |
 |   podem ter erros. Confirme no site da entidade. Fonte: ordemdospsicologos.pt    |
 +----------------------------------------------------------------------------------+
@@ -198,7 +198,7 @@ Mobile wireframe:
 
 ```
 +--------------------------------+
-| Intern Quest                   |
+| Abre Portas                   |
 | ! Informativo, não é vaga. ... |
 | > Filtros (2 ativos)  [Limpar] |
 | Ordenar [Nº crescente      v]  |

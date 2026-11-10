@@ -295,6 +295,33 @@ tbody.addEventListener('click', e => { // opening a website, e-mail or phone mar
   try { localStorage.setItem('iq-status', JSON.stringify(SAVED)); } catch { /* storage full or blocked */ }
   update();
 });
+function saveAll() { try { localStorage.setItem('iq-status', JSON.stringify(SAVED)); } catch { /* storage full or blocked */ } }
+function mergeSaved(data) { // import: keep the most recent change per entity; returns how many were taken
+  let n = 0;
+  for (const [id, v] of Object.entries(data || {})) {
+    if (Object.hasOwn(STATUS, v?.s) && Number.isFinite(v.t) && !(SAVED[id]?.t >= v.t)) { SAVED[id] = { s: v.s, t: v.t }; n++; }
+  }
+  saveAll();
+  return n;
+}
+const shared = new URLSearchParams(location.hash.slice(1)).get('prog'); // link from another device: #prog=<json>
+if (shared) {
+  try { mergeSaved(JSON.parse(shared)); } catch { /* bad link: ignore */ }
+  history.replaceState(null, '', location.pathname + location.search);
+}
+$('#exp').onclick = () => {
+  const a = el('a'); a.download = 'abre-portas-progresso.json';
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(SAVED)], { type: 'application/json' }));
+  a.click(); URL.revokeObjectURL(a.href);
+};
+$('#imp').onchange = async e => {
+  try { alert(`${mergeSaved(JSON.parse(await e.target.files[0].text()))} estados importados.`); } catch { alert('Ficheiro inválido.'); }
+  e.target.value = ''; update();
+};
+$('#lnk').onclick = async () => {
+  const url = location.origin + location.pathname + '#prog=' + encodeURIComponent(JSON.stringify(SAVED));
+  try { await navigator.clipboard.writeText(url); alert('Link copiado.'); } catch { prompt('Copia o link:', url); }
+};
 if (new URLSearchParams(location.search).has('dev')) { // open index.html?dev to test the follow-up banner
   $('#dev').hidden = false;
   $('#dev button').onclick = () => {

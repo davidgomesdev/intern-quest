@@ -1,7 +1,7 @@
 'use strict';
 document.documentElement.classList.add('js'); // CSS hides the raw rows only while this script is running
 // Abre Portas: filter, sort and page the raw <tr> lines of index.html. State lives in the URL hash.
-const SIZES = [10, 20, 50, 100]; // per-page choices; first-load default is 20
+const SIZES = [10, 20, 50, 100], PP = 10; // per-page choices and the default
 const AREAS = { // slug -> [emoji, label]; one place for both
   clinica: ['🩺', 'Clínica e da Saúde'], neuropsicologia: ['🧠', 'Neuropsicologia'], psicoterapia: ['💬', 'Psicoterapia'],
   educacao: ['🎓', 'Educação'], organizacoes: ['💼', 'Trabalho, Social e Organizações'], justica: ['⚖️', 'Justiça / Forense'],
@@ -33,7 +33,7 @@ let ROWS = [], TOTAL = 0, S;
 const LOC = {}; // distrito -> Set of locais (from lookup/, embedded in index.html): Local only lists the chosen distrito's
 
 const norm = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();
-const defaults = () => ({ nome: '', c: '', d: '', a: [], st: [], estado: 'ok', vazias: false, contacto: false, ord: 'n', dir: 'asc', p: 1, pp: 20 });
+const defaults = () => ({ nome: '', c: '', d: '', a: [], st: [], estado: 'ok', vazias: false, contacto: false, ord: 'n', dir: 'asc', p: 1, pp: PP });
 const FLAGS = ['vazias', 'contacto']; // on/off filters: stored as "1" in the hash, absent when off
 
 function parse() {
@@ -44,7 +44,7 @@ function parse() {
     return { el, id: el.id, n: +c[1].textContent, ok: c[0].textContent === '✅', removed: 'removed' in el.dataset,
       empty: Array.from(c).slice(3, 11).every(miss),
       nome: c[2].textContent, local: val(3), distrito: val(4), dUnk: !!c[4].firstElementChild, areas,
-      kNome: norm(c[2].textContent), contacto: !!(val(8) || val(9)), done: false };
+      kNome: norm(c[2].textContent), contacto: !!(val(8) || val(9) || val(10)), done: false };
   });
   TOTAL = ROWS.filter(r => !r.removed).length;
 }
@@ -67,7 +67,7 @@ function readState() {
     a: g('a').split(',').filter(k => Object.hasOwn(AREAS, k)), st: g('st').split(',').filter(k => Object.hasOwn(STATUS, k)), vazias: g('vazias') === '1', contacto: g('contacto') === '1',
     estado: ['todos', 'todo'].includes(g('estado')) ? g('estado') : 'ok',
     ord: Object.hasOwn(KEY, g('ord')) ? g('ord') : 'n', dir: g('dir') === 'desc' ? 'desc' : 'asc', p: parseInt(g('p'), 10) || 1,
-    pp: SIZES.includes(+g('pp')) ? +g('pp') : 20 };
+    pp: SIZES.includes(+g('pp')) ? +g('pp') : PP };
   if (S.c && !S.d) S.d = Object.keys(LOC).find(d => LOC[d].has(S.c)) || ''; // old links: c= alone // old links: c= alone
   toForm();
   S.c = form.elements.c.value; S.d = form.elements.d.value; // drop values that are not in the lists

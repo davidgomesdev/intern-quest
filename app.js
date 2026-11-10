@@ -142,15 +142,18 @@ function enhance(r) {
   if (has(c[8])) site(c[8]);
   if (has(c[9])) c[9].replaceChildren(link('mailto:' + c[9].textContent, c[9].textContent));
   if (has(c[10])) { const t = c[10].textContent; c[10].replaceChildren(link('tel:' + t.replace(/ /g, ''), t.replace(/^\+351 /, ''))); }
-  const td = el('td'), sel = el('select'); // status picker (extra column, not part of the HTML row contract)
-  sel.setAttribute('aria-label', 'Estado de seguimento'); sel.dataset.id = r.id;
+  const td = el('td'), sel = el('select', 'pilula'); // status picker (extra column, not part of the HTML row contract)
+  sel.setAttribute('aria-label', 'Estado de seguimento'); sel.dataset.id = r.id; r.sel = sel;
   for (const k in STATUS) sel.append(new Option(STATUS[k] + (NOTE.includes(k) ? ' 🔔' : ''), k));
-  sel.value = stOf(r); td.setAttribute('role', 'cell'); td.append(sel); r.el.append(td);
+  td.setAttribute('role', 'cell'); td.append(sel); r.el.append(td);
   r.done = true;
 }
 
 function render(slice) {
-  slice.forEach(r => r.done || enhance(r));
+  slice.forEach(r => {
+    r.done || enhance(r);
+    r.el.dataset.st = r.sel.dataset.st = r.sel.value = stOf(r); // colours the card and the pill
+  });
   tbody.replaceChildren(...slice.map(r => r.el));
   tbody.classList.add('ready');
 }
@@ -181,7 +184,8 @@ function followUp() { // banner: note statuses set 5+ days ago
   const ul = el('ul');
   for (const r of due) {
     const days = Math.floor((Date.now() - SAVED[r.id].t) / 864e5), li = el('li');
-    li.append(link(`#nome=${encodeURIComponent(r.nome)}&estado=todos&vazias=1`, `${r.n} ${r.nome}`), ` · ${STATUS[stOf(r)]} há ${days} dias`);
+    li.dataset.st = stOf(r);
+    li.append(link(`#nome=${encodeURIComponent(r.nome)}&estado=todos&vazias=1`, `${r.n} ${r.nome}`), el('span', '', ` · ${STATUS[stOf(r)]}, há ${days} dias`));
     ul.append(li);
   }
   box.replaceChildren(el('strong', '', `🔔 ${due.length} ${due.length > 1 ? 'entidades precisam' : 'entidade precisa'} de seguimento`), ul);

@@ -204,6 +204,32 @@ def test_apply_row():
     assert apply_row.build(old, {}).count(IND) == 6
 
 
+def test_apply_batch():
+    """End to end in a throwaway repo: one ok commit, one pre-failed, one missing JSON."""
+    d = tempfile.mkdtemp()
+    try:
+        g = lambda *a: subprocess.run(["git", "-C", d, *a], capture_output=True, text=True, check=True).stdout
+        rows = [row(["⬜", n, f"Nome {n}"] + [""] * 8, id_="e" + n) for n in ("0001", "0002", "0003")]
+        with open(os.path.join(d, "index.html"), "w", encoding="utf-8") as f:
+            f.write("\n".join(rows))
+        g("init", "-q"); g("config", "user.name", "t"); g("config", "user.email", "t@t")
+        g("config", "commit.gpgsign", "false")  # throwaway repo only
+        g("add", "."); g("commit", "-qm", "init")
+        out = os.path.join(d, "out"); os.mkdir(out)
+        with open(os.path.join(out, "e0001.json"), "w", encoding="utf-8") as f:
+            json.dump({"morada": "Rua X", "flags": ["duvida"], "sources": ["https://a.pt/x"]}, f)
+        r = subprocess.run([sys.executable, os.path.join(HERE, "apply_batch.py"), out, "0001", "0002:no search", "0003"],
+                           cwd=d, capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        assert r.stdout.split("\n")[:3] == ["e0001 ok", "e0002 FAILED: no search", "e0003 FAILED: no e0003.json"], r.stdout
+        assert g("log", "--format=%s").split() == ["feat(data):", "fill", "e0001", "init"], g("log", "--oneline")
+        assert "Revisar: duvida" in open(os.path.join(d, "index.html"), encoding="utf-8").read()
+        body = open(os.path.join(out, "body.md"), encoding="utf-8").read()
+        assert "- e0001 (Nome 0001): ok, https://a.pt/x" in body and "- e0002 (Nome 0002): FAILED: no search" in body, body
+    finally:
+        shutil.rmtree(d)
+
+
 SHELL = os.path.join(os.path.dirname(HERE), "index.html")
 FIX = os.path.join(os.path.dirname(HERE), "tests")
 

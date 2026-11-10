@@ -168,6 +168,12 @@ tr[data-removed] td:nth-child(3) { color: var(--muted); }
 
 footer { padding: var(--s4) 0 var(--s6); font-size: 13px; color: var(--muted); }
 
+.contacto { margin: 0 0 var(--s6); padding: var(--s4) var(--s5); background: var(--soft); border: 1px solid var(--line); border-left: 4px solid var(--rule); border-radius: var(--r-card); font-size: 14px; }
+.contacto h2 { margin: 0 0 var(--s2); font-family: var(--round); font-size: 16px; }
+.contacto p { margin: 0 0 var(--s2); }
+.contacto p:last-child { margin-bottom: 0; }
+.contacto a { color: var(--accent); }
+
 /* ---------- Mobile: single-column cards ---------- */
 @media (max-width: 719px) {
   .topo { padding-top: var(--s5); }

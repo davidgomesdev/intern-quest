@@ -203,3 +203,8 @@ th.nosort{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0
 .src-box { position: absolute; z-index: 3; left: 0; top: 100%; width: min(320px, calc(100vw - 48px)); display: grid; gap: var(--s2);
   padding: var(--s3); background: var(--card); border: 1px solid var(--edge); border-radius: var(--r-field);
   box-shadow: 0 4px 16px rgb(0 0 0 / 0.18); font-size: 13.5px; line-height: 1.4; font-weight: 400; overflow-wrap: anywhere; }
+
+/* ---------- Follow-up status ---------- */
+#followup { margin-bottom: var(--s4); max-width: none; }
+#followup ul { margin: var(--s2) 0 0; padding-left: var(--s5); }
+td select { font: inherit; max-width: 12em; }

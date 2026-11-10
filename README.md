@@ -4,6 +4,8 @@ A static page listing the 6,345 entities in the OPP (Ordem dos Psicólogos Portu
 
 Live site: https://davidgomesdev.github.io/intern-quest/
 
+Visitors can also keep their own named lists of entities (with notes, CSV/e-mail export and share links). They are stored in the browser only; see SPEC.md section 6.7.
+
 The list is informational only. It is not a list of open vacancies; confirm availability with each entity.
 
 ## Row contract

@@ -375,6 +375,23 @@ TRACE = """<script>addEventListener('load', () => {
 });</script>"""
 
 
+# Lists scenario: seeds localStorage before app.js runs (deferred), runs BODY after load, reports what happened in data-out.
+LISTS_SEED = """JSON.stringify([["Favoritas", [["e0002", "ligar"], ["e0004", ""], ["e0005", ""]]], ["Vazia", []]])"""
+LISTS_JS = """<script>localStorage.clear(); localStorage.setItem('iq-lists', %SEED%);
+addEventListener('load', async () => {
+  const out = {}, $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+  const tick = () => new Promise(r => setTimeout(r, 50));
+  Object.defineProperty(navigator, 'clipboard', {value: {writeText: t => (out.copied = t, Promise.resolve())}});
+  const B = Blob; window.Blob = function (p, o) { out.blob = p[0]; return new B(p, o); };
+  HTMLAnchorElement.prototype.click = function () { out.file = this.download; };
+  window.confirm = () => true; window.alert = m => { out.alert = m; };
+  %BODY%
+  out.stored = localStorage.getItem('iq-lists'); out.hash = location.hash;
+  document.documentElement.dataset.out = JSON.stringify(out);
+  localStorage.clear();
+});</script>"""
+
+
 class Page:
     """Headless-Chrome harness: index.html with its rows replaced by `fixture`."""
 
@@ -579,6 +596,78 @@ def test_page():
         trace = json.loads(html.unescape(re.search(r'data-trace="([^"]*)"', Page(chrome, tmp, _gen_rows(), TRACE).dump()).group(1)))
         assert trace == ["#p=2", "#ord=nome", "#ord=nome&dir=desc", "#nome=entidade+01&ord=nome&dir=desc",
                          "#nome=entidade+01&a=clinica&ord=nome&dir=desc", ""], trace
+
+        def lists(body, h="", seed=LISTS_SEED):
+            script = LISTS_JS.replace("%SEED%", seed).replace("%BODY%", body)
+            dom = Page(chrome, tmp, _gen_rows(), script).dump(h, wait=1500)
+            return dom, json.loads(html.unescape(re.search(r'data-out="([^"]*)"', dom).group(1)))
+        stored = lambda out: json.loads(out["stored"])
+        FAV = ["Favoritas", [["e0002", "ligar"], ["e0004", ""], ["e0005", ""]]]
+
+        view = ("out.tabs = $$('#listas .tab').map(b => b.textContent); out.notes = $$('.nota').map(i => i.value);"
+                "out.rm = $$('.lst-rm').length; out.mail = $('[data-act=emails]').textContent;")
+        dom, out = lists(view, "l=Favoritas")  # a list shows all its members, even ⬜ ones that Estado would hide
+        assert _ids(dom) == ["e0002", "e0004", "e0005"] and _count(dom) == "3 de 3 entidades, 2 com dados"
+        assert out["tabs"] == ["Todas", "Favoritas3", "Vazia0", "+ Nova lista"] and out["notes"] == ["ligar", "", ""]
+        assert out["rm"] == 3 and out["mail"] == "Copiar e-mails (1)" and out["hash"] == "#l=Favoritas"
+        dom, out = lists(view, "l=Vazia")
+        assert _ids(dom) == [] and not re.search(r'<div id="lista-vazia"[^>]*hidden', dom) and re.search(r'<div id="vazio"[^>]*hidden', dom)
+        dom, out = lists(view, "l=Nope")  # unknown list: back to Todas
+        assert _count(dom).startswith("60 de 120") and out["rm"] == 0 and out["hash"] == ""
+
+        dom, out = lists("""$('#rows [data-act=pick]').click();
+  out.title = $('#pick-t').textContent; out.open = $('#pick').open; out.cbs = $$('#pick-l input').map(c => [c.dataset.n, c.checked]);
+  const c = $$('#pick-l input')[1]; c.checked = true; c.dispatchEvent(new Event('change', {bubbles: true}));
+  $('#pick-n').value = ' Nova '; $('[data-act=padd]').click();
+  out.cbs2 = $$('#pick-l input').map(c => [c.dataset.n, c.checked]); out.star = $('#rows [data-act=pick]').textContent;""")
+        assert out["open"] and out["title"] == "Listas · Entidade 002" and out["cbs"] == [["Favoritas", True], ["Vazia", False]]
+        assert out["cbs2"] == [["Favoritas", True], ["Vazia", True], ["Nova", True]] and out["star"] == "★"
+        assert stored(out) == [FAV, ["Vazia", [["e0002", ""]]], ["Nova", [["e0002", ""]]]]
+
+        dom, out = lists("""$('.lst-rm').click();
+  const n = $('.nota'); n.value = 'novo'; n.dispatchEvent(new Event('input', {bubbles: true}));
+  out.ids = $$('#rows tr').map(r => r.id);""", "l=Favoritas")  # remove a member, then edit the next one's note
+        assert out["ids"] == ["e0004", "e0005"]
+        assert stored(out) == [["Favoritas", [["e0004", "novo"], ["e0005", ""]]], ["Vazia", []]]
+
+        dom, out = lists("window.prompt = () => ' Teste '; $('[data-act=new]').click();")
+        assert out["hash"] == "#l=Teste" and stored(out) == [FAV, ["Vazia", []], ["Teste", []]]
+        dom, out = lists("$('[data-act=del]').click();", "l=Favoritas")
+        assert out["hash"] == "" and stored(out) == [["Vazia", []]]
+
+        dom, out = lists("""const n = $('.nota'); n.value = '=1+1'; n.dispatchEvent(new Event('input', {bubbles: true}));
+  $('[data-act=emails]').click(); out.mails = out.copied;
+  $('[data-act=csv]').click(); out.csv = out.blob; out.csvFile = out.file;
+  $('[data-act=link]').click(); out.link = out.copied;""", "l=Favoritas")
+        assert out["mails"] == "a@x.example" and out["csvFile"] == "favoritas.csv"
+        rows = out["csv"].split("\r\n")
+        assert rows[0] == '﻿"Nº";"Nome";"Local";"Distrito";"Morada";"E-mail";"Telefone";"Website";"Seguimento";"Nota"'
+        assert rows[1] == '"2";"Entidade 002";"Amarante";"Porto";"Rua X 1";"a@x.example";"210 000 000";"https://x.example";"Por ver";"\'=1+1"'
+        assert rows[3] == '"5";"Entidade 005";"";"";"";"";"";"";"Por ver";""' and len(rows) == 4
+        assert out["link"].endswith("#share=Favoritas%3A0002,0004,0005")
+
+        dom, out = lists("""out.banner = $('#partilha').textContent; out.shown = !$('#partilha').hidden;
+  $('[data-act=shsave]').click(); out.gone = $('#partilha').hidden;""", "share=Amigos%3A0001,0003,9999,xx,0003")
+        assert "Amigos" in out["banner"] and "2 entidades" in out["banner"] and out["shown"] and out["gone"]  # 9999, xx and the duplicate dropped
+        assert out["hash"] == "#l=Amigos" and stored(out) == [FAV, ["Vazia", []], ["Amigos", [["e0001", ""], ["e0003", ""]]]]
+        dom, out = lists("$('[data-act=shskip]').click();", "share=Amigos%3A0001")
+        assert out["hash"] == "" and len(stored(out)) == 2
+        assert lists("out.shown = !$('#partilha').hidden;", "share=garbage")[1]["shown"] is False
+
+        dom, out = lists("""$('[data-act=exp]').click(); out.backup = out.blob; out.file2 = out.file;
+  const dt = new DataTransfer(); dt.items.add(new File([JSON.stringify([['Importada', [['e0001', 'x'], ['bad', 'y']]], ['Favoritas', [['e0003', '']]]])], 'l.json'));
+  $('#imp-f').files = dt.files; $('#imp-f').dispatchEvent(new Event('change')); await tick(); await tick();""")
+        assert out["file2"] == "abre-portas-listas.json" and json.loads(out["backup"]) == [FAV, ["Vazia", []]]
+        assert out["alert"] == "Listas importadas."
+        assert stored(out) == [["Favoritas", FAV[1] + [["e0003", ""]]], ["Vazia", []], ["Importada", [["e0001", "x"]]]]
+        dom, out = lists("""const dt = new DataTransfer(); dt.items.add(new File(['{nope'], 'l.json'));
+  $('#imp-f').files = dt.files; $('#imp-f').dispatchEvent(new Event('change')); await tick(); await tick();""")
+        assert out["alert"].startswith("Ficheiro inválido") and stored(out) == [FAV, ["Vazia", []]]
+
+        dom, out = lists(view, seed="'{bad'")  # corrupt storage: page still works, no lists
+        assert out["tabs"] == ["Todas", "+ Nova lista"] and _count(dom).startswith("60 de 120")
+        dom, out = lists(view, seed="""JSON.stringify([["__proto__", [["e0002", "x"], ["__proto__", "y"]]], ["ok", [["e0003"]]], [" ", []]])""")
+        assert out["tabs"] == ["Todas", "__proto__1", "ok1", "+ Nova lista"], out["tabs"]  # hostile names are plain names; bad ids and blank names dropped
 
 
 def main():

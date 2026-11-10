@@ -118,6 +118,14 @@ A visible note: the list is from OPP, informational, and does not imply a vacanc
 ### 6.6 Accessibility
 Real `<table>` with `<th scope="col">`, keyboard-operable sort, labels on all filter inputs, status conveyed by emoji **and** an accessible text (`title`/`aria-label`: "Preenchido" / "Por preencher").
 
+### 6.7 Custom lists
+Visitors can group entities into named lists (e.g. "Candidaturas"). Lists are personal and live only in the browser (`localStorage` key `iq-lists`: a JSON array of `[name, [[entityId, note], ...]]`); there is no backend.
+- Tabs above the table: `Todas` plus one tab per list with a count, and `+ Nova lista`. A tab is a filter (`l=<name>` in the hash), so sort, filters and paging keep working. Inside a list every member shows, filled or not (the Estado and "Incluir sem informação" filters are ignored there).
+- The ☆/★ button on each card opens a dialog with one checkbox per list and a field to create a list. Inside a list the card also gets ✕ (remove from this list) and a free-text note, saved as you type.
+- List actions: copy the e-mails (deduplicated, `; `-separated), download a CSV (`;`-separated, UTF-8 with BOM, cells starting with `= + - @` prefixed with `'`), copy a share link, delete the list. There is deliberately no `mailto:` export.
+- A share link carries only entity ids: `#share=<name>:<id>,<id>` (4+ digit protocol numbers). Opening one shows a banner with Guardar/Ignorar; nothing is stored until the visitor accepts. Notes are not shared.
+- Backup: export all lists as JSON and import such a file (merged into existing lists). Imports and links are validated: unknown ids and blank names are dropped, names and notes are length-capped.
+
 ## 7. Workflow
 
 ### 7.1 Orchestrator (a Claude session, not part of the site)

@@ -528,18 +528,22 @@ def test_page():
         _big = Page(chrome, tmp, _gen_rows()).dump
         big = lambda h="": _big(ALL + h)
         dom = big()
-        assert _count(dom) == "120 de 120 entidades, 60 com dados" and _pager(dom) == "Página 1 de 3"
-        assert len(_ids(dom)) == 50 and _ids(dom)[0] == "e0001" and _disabled(dom) == 2
+        assert _count(dom) == "120 de 120 entidades, 60 com dados" and _pager(dom) == "Página 1 de 12"  # default 10 per page
+        assert len(_ids(dom)) == 10 and _ids(dom)[0] == "e0001" and _disabled(dom) == 2
         assert 'data-p="prev"' in dom and re.findall(r'data-p="prev"[^>]*disabled', dom)
         assert not re.findall(r'data-p="next"[^>]*disabled', dom)
         dom = big("p=2")
-        assert _pager(dom) == "Página 2 de 3" and _ids(dom)[0] == "e0051" and len(_ids(dom)) == 50 and _disabled(dom) == 0
-        dom = big("p=3")
-        assert _pager(dom) == "Página 3 de 3" and len(_ids(dom)) == 20 and _ids(dom)[-1] == "e0120"
+        assert _pager(dom) == "Página 2 de 12" and _ids(dom)[0] == "e0011" and len(_ids(dom)) == 10 and _disabled(dom) == 0
+        dom = big("p=12")
+        assert _pager(dom) == "Página 12 de 12" and len(_ids(dom)) == 10 and _ids(dom)[-1] == "e0120"
         assert re.findall(r'data-p="next"[^>]*disabled', dom) and not re.findall(r'data-p="prev"[^>]*disabled', dom)
-        assert _pager(big("p=999")) == "Página 3 de 3"
+        assert _pager(big("p=999")) == "Página 12 de 12"
         for h in ["p=0", "p=-5", "p=abc"]:
-            assert _pager(big(h)) == "Página 1 de 3", h
+            assert _pager(big(h)) == "Página 1 de 12", h
+        dom = big("pp=50&p=3")  # per-page choice from the hash: 120 rows -> 50 + 50 + 20
+        assert _pager(dom) == "Página 3 de 3" and len(_ids(dom)) == 20 and _ids(dom)[0] == "e0101"
+        for h in ["pp=7", "pp=abc", "pp=0"]:  # not one of the choices: fall back to 10
+            assert _pager(big(h)) == "Página 1 de 12", h
         dom = big("p=2&nome=entidade%2001")
         assert _count(dom).startswith("10 de 120") and _pager(dom) == "Página 1 de 1"
         assert _count(big("c=Vila%20do%20Conde")).startswith("30 de 120")

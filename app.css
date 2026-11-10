@@ -161,6 +161,7 @@ tbody tr:has(.st-todo):not([data-removed]) td:nth-child(3)::after {
 tr[data-removed] td:nth-child(3) { color: var(--muted); }
 
 /* cell enhancements */
+.conf { display: block; font-size: 13px; color: var(--accent); }
 .st { line-height: 1; }
 .areas { display: flex; flex-wrap: wrap; gap: 6px; }
 .area { display: inline-flex; gap: 5px; align-items: baseline; padding: 2px 10px; border-radius: var(--r-pill); background: var(--chip); color: var(--chip-fg); font-size: 13px; font-weight: 500; }

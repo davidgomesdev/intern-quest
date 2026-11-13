@@ -220,8 +220,19 @@ function followUp() { // banner: note statuses set 5+ days ago
   box.replaceChildren(el('strong', '', `🔔 ${due.length} ${due.length > 1 ? 'entidades precisam' : 'entidade precisa'} de seguimento`), ul);
 }
 
+function stCounts() { // chips show how many entities sit in each status
+  const n = {};
+  for (const r of ROWS) if (!r.removed) n[stOf(r)] = (n[stOf(r)] || 0) + 1;
+  form.querySelectorAll('[name=st]').forEach(i => {
+    const s = i.nextElementSibling;
+    s.dataset.base ??= s.textContent;
+    s.textContent = `${s.dataset.base.replace(' 🔔', '')} (${n[i.value] || 0})${s.dataset.base.includes('🔔') ? ' 🔔' : ''}`;
+  });
+}
+
 function update() {
   followUp();
+  stCounts();
   const q = { nome: norm(S.nome) };
   const list = sortRows(ROWS.filter(r => matches(r, q)));
   const last = Math.max(1, Math.ceil(list.length / S.pp));
@@ -245,6 +256,13 @@ tbody.addEventListener('change', e => {
   const id = e.target.dataset.id;
   if (!id) return;
   if (e.target.value === 'ver') delete SAVED[id]; else SAVED[id] = { s: e.target.value, t: Date.now() };
+  try { localStorage.setItem('iq-status', JSON.stringify(SAVED)); } catch { /* storage full or blocked */ }
+  update();
+});
+tbody.addEventListener('click', e => { // opening a website, e-mail or phone marks a "Por ver" entity as Visto
+  const a = e.target.closest('td a'), id = a?.closest('tr')?.querySelector('select')?.dataset.id;
+  if (!id || ![8, 9, 10].includes(a.closest('td').cellIndex) || SAVED[id]) return;
+  SAVED[id] = { s: 'visto', t: Date.now() };
   try { localStorage.setItem('iq-status', JSON.stringify(SAVED)); } catch { /* storage full or blocked */ }
   update();
 });

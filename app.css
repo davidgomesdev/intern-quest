@@ -259,4 +259,5 @@ input[name=st] + span::before { content: ""; display: inline-block; width: .6em;
   td:nth-child(12) { flex: 1 1 100%; padding: 6px 0 0; }
   .pilula { min-height: 40px; font-size: 15px; }
 }
-.rep { display: block; margin-top: 4px; font-size: 12px; }
+.rep { font: inherit; padding: 0 2px; border: 0; background: none; cursor: pointer; filter: grayscale(.6); }
+.rep:hover, .rep:focus-visible { filter: none; }

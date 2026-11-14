@@ -37,4 +37,4 @@ CI checks that an entity PR changes exactly one row of `index.html` (same id and
     scripts/test.py               # unit tests, plus a headless-Chrome page test
     scripts/check.py index.html   # validate every row
 
-The page test is skipped when no Chrome is found (set `$CHROME` to point at one). CI sets `REQUIRE_CHROME=1`, so a missing Chrome fails the build instead.
+The page test is skipped when no Chrome is found (set `$CHROME` to point at one). CI sets `REQUIRE_CHROME=1`, so a missing Chrome fails the build instead. The page checks share a few Chrome launches (each one is slow to start on a machine that scans every process): every fixture page is loaded in turn as an iframe of one parent page, and `$CHROME_JOBS` (default 3) sets how many launches run side by side.

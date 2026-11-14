@@ -363,6 +363,59 @@ def _gen_rows(n=120):
     return out
 
 
+# Page checks run in a few headless-Chrome launches, not one per check. A launch costs seconds (a machine that scans
+# every process and file, e.g. endpoint security, pays that on each one), and most checks only differ by URL hash or
+# by seeded localStorage. So every fixture page below is a "job": a launch loads its jobs one after another as
+# iframes of a parent page, each job posts back its DOM (plus whatever its own script measured), and the parent hands
+# all of it to Python as JSON. The assertions then run on those results. file:// pages share localStorage, so the
+# jobs of one launch never overlap; separate launches have separate profiles and do run side by side.
+CHROME_JOBS = int(os.environ.get("CHROME_JOBS", "3"))  # how many launches the page jobs are split over
+
+# Reporter every job page gets: finish(extra) posts the DOM + extra to the parent; pages without their own script
+# finish by themselves (`settle` ms after load).
+HEAD_JS = """<script>
+window.onerror = e => { document.documentElement.dataset.err = e; parent.postMessage({id: window.name, err: String(e)}, '*'); };
+try { localStorage.clear(); } catch (e) {}
+window.finish = extra => parent.postMessage({id: window.name, dom: document.documentElement.outerHTML, ...extra}, '*');
+if (%SETTLE%) addEventListener('load', () => setTimeout(() => finish(), %SETTLE%));
+</script>"""
+
+PARENT = """<!doctype html><meta charset="utf-8"><style>html, body {margin: 0} iframe {border: 0; display: block}</style>
+<body><script>
+const jobs = %JOBS%, res = {}, errs = {}, waiting = {};
+addEventListener('message', e => {
+  const m = e.data || {};
+  if ('dom' in m) waiting[m.id] && waiting[m.id](m); else if ('err' in m) (errs[m.id] ||= []).push(m.err);
+});
+(async () => {
+  for (const j of jobs) {
+    const f = document.createElement('iframe');
+    f.name = j.id; f.style.width = innerWidth + 'px'; f.style.height = innerHeight + 'px';
+    res[j.id] = await new Promise(done => {
+      waiting[j.id] = done; setTimeout(() => done({timeout: true}), j.limit);
+      f.src = j.url; document.body.append(f);
+    });
+    res[j.id].errs = errs[j.id] || [];
+    f.remove();
+  }
+  document.documentElement.dataset.res = JSON.stringify(res);
+})();
+</script>"""
+
+# One page, many hashes: snapshots the DOM for each hash, the way a visitor changing the URL gets it (hashchange).
+SWEEP = """<script>addEventListener('load', async () => {
+  const H = %HASHES%, snaps = [], sleep = ms => new Promise(r => setTimeout(r, ms));
+  let n = 0; addEventListener('hashchange', () => n++);
+  for (let i = 0; i < H.length; i++) {
+    if (i) {  // the first hash is the one the page was loaded with
+      const before = n; location.hash = H[i]; await sleep(30);
+      if (n === before) dispatchEvent(new HashChangeEvent('hashchange'));  // same hash as before: no event of its own
+    }
+    snaps.push(document.documentElement.outerHTML);
+  }
+  finish({snaps});
+});</script>"""
+
 TRACE = """<script>addEventListener('load', () => {
   const t = [], f = document.getElementById('filters'), h = () => t.push(location.hash);
   document.querySelector('[data-p=next]').click(); h();
@@ -371,11 +424,10 @@ TRACE = """<script>addEventListener('load', () => {
   f.elements.nome.value = 'entidade 01'; f.dispatchEvent(new Event('input')); h();
   f.querySelector('[name=a]').checked = true; f.dispatchEvent(new Event('input')); h();
   document.querySelector('button.limpar').click(); h();
-  document.documentElement.dataset.trace = JSON.stringify(t);
+  finish({trace: t});
 });</script>"""
 
-
-# Lists scenario: seeds localStorage before app.js runs (deferred), runs BODY after load, reports what happened in data-out.
+# Lists scenario: seeds localStorage before app.js runs (deferred), runs BODY after load, reports what happened as `out`.
 LISTS_SEED = """JSON.stringify([["Favoritas", [["e0002", "ligar"], ["e0004", ""], ["e0005", ""]]], ["Vazia", []]])"""
 LISTS_JS = """<script>localStorage.clear(); localStorage.setItem('iq-lists', %SEED%);
 addEventListener('load', async () => {
@@ -385,54 +437,36 @@ addEventListener('load', async () => {
   const B = Blob; window.Blob = function (p, o) { out.blob = p[0]; return new B(p, o); };
   HTMLAnchorElement.prototype.click = function () { out.file = this.download; };
   window.confirm = () => true; window.alert = m => { out.alert = m; };
+  try {
   %BODY%
+  } catch (e) { out.error = String(e); }
   out.stored = localStorage.getItem('iq-lists'); out.hash = location.hash;
-  document.documentElement.dataset.out = JSON.stringify(out);
   localStorage.clear();
+  finish({out});
 });</script>"""
 
-
-# Every check starts a fresh headless Chrome, and a start costs seconds (several on a machine that scans every
-# process and file, e.g. endpoint security), so launches run side by side. Past ~4 at once nothing gets faster.
-_CHROME_SLOTS = threading.BoundedSemaphore(int(os.environ.get("CHROME_JOBS", "4")))
-
-
-def _pmap(fn, items):
-    """fn over items, concurrently (Page.dump caps how many Chromes really run), results in order."""
-    with concurrent.futures.ThreadPoolExecutor(8) as ex:
-        return list(ex.map(fn, items))
+_PAGE_N = iter(range(10**6))
 
 
 class Page:
-    """Headless-Chrome harness: index.html with its rows replaced by `fixture`."""
+    """index.html with its rows replaced by `fixture`, written to tmp, wired to report to the parent page."""
 
-    def __init__(self, chrome, tmp, fixture, extra="", script=None):
-        self.chrome, self.tmp = chrome, tmp
+    def __init__(self, tmp, fixture, extra="", script=None, settle=300):
         lines = []
         for l in _shell_lines():
             lines.append(l)
             if l.startswith("<head>"):
                 lines.append(f'<base href="file://{os.path.dirname(HERE)}/">')
-                lines.append("<script>window.onerror=e=>document.documentElement.dataset.err=e</script>")
+                lines.append(HEAD_JS.replace("%SETTLE%", str(0 if "finish(" in extra else settle)))
             if l.startswith('<tbody id="rows"'):
                 lines += fixture
             if l.startswith("</body>"):
                 lines.insert(-1, extra)
         if script:
             lines = [l.replace('src="app.js"', f'src="file://{script}"') for l in lines]
-        self.path = os.path.join(tmp, f"page{abs(hash((extra, script)))}{len(fixture)}.html")
+        self.path = os.path.join(tmp, f"page{next(_PAGE_N)}.html")
         with open(self.path, "w", encoding="utf-8") as f:
             f.write("\n".join(lines))
-
-    def dump(self, h="", allow_err=False, wait=0):
-        profile = tempfile.mkdtemp(dir=self.tmp)  # one per launch, so launches can overlap
-        with _CHROME_SLOTS:
-            r = subprocess.run([self.chrome, "--headless", "--disable-gpu", "--no-sandbox", "--dump-dom", f"--virtual-time-budget={wait}" if wait else "--no-first-run",
-                                f"--user-data-dir={profile}", f"file://{self.path}#{h}"],
-                               capture_output=True, text=True, timeout=120)
-        assert r.returncode == 0, r.stderr
-        assert allow_err or "data-err" not in r.stdout, (h, "page error")
-        return r.stdout
 
 
 def _text(dom, pat):
@@ -477,205 +511,86 @@ def test_lookup_embedded():
         assert embed.line() in f.read().split("\n"), "index.html lookup is stale: run scripts/embed_lookup.py"
 
 
-@contextlib.contextmanager
-def _page_env():
-    """(chrome, fixture rows, scratch dir) for one part of the page tests; None when there is no Chrome to run."""
+def _fixture():
+    with open(os.path.join(FIX, "rows.txt"), encoding="utf-8") as f:
+        return f.read().rstrip("\n").split("\n")
+
+
+def _need_chrome():
+    """The Chrome binary, or None (page tests skipped) when there is none; a failure under REQUIRE_CHROME."""
     chrome = _chrome()
     if not chrome:
         assert not os.environ.get("REQUIRE_CHROME"), "REQUIRE_CHROME is set but no Chrome binary was found"
         print("     (page tests skipped: no Chrome found, set $CHROME)")
-        yield None
-        return
-    with open(os.path.join(FIX, "rows.txt"), encoding="utf-8") as f:
-        fixture = f.read().rstrip("\n").split("\n")
-    with tempfile.TemporaryDirectory() as tmp:
-        yield chrome, fixture, tmp
+    return chrome
 
 
-def _lists_runner(chrome, tmp):
-    def lists(body, h="", seed=LISTS_SEED, wait=1500):
-        script = LISTS_JS.replace("%SEED%", seed).replace("%BODY%", body)
-        dom = Page(chrome, tmp, _gen_rows(), script).dump(h, wait=wait)
-        return dom, json.loads(html.unescape(re.search(r'data-out="([^"]*)"', dom).group(1)))
-    return lists
+ALL = "estado=todos&vazias=1&"
+D3 = "3 de 5 entidades, 3 com dados"
+# (hash, count, Filtros ativos) on the 5-row fixture
+CASES = [
+    ("", D3, ""), ("a=clinica", "2 de 5 entidades, 2 com dados", "(1 ativo)"),
+    ("a=clinica,neuropsicologia", D3, "(2 ativos)"),
+    ("a=", D3, ""),
+    ("c=Lisboa", "1 de 5 entidades, 1 com dados", "(1 ativo)"),
+    ("nome=agata", "1 de 5 entidades, 1 com dados", "(1 ativo)"),
+    ("nome=%C3%81GATA", "1 de 5 entidades, 1 com dados", "(1 ativo)"),
+    ("nome=epsilon", "0 de 5 entidades, 0 com dados", "(1 ativo)"),
+    ("nome=epsilon&vazias=1", "1 de 5 entidades, 1 com dados", "(2 ativos)"),
+    ("c=Porto", "1 de 5 entidades, 1 com dados", "(1 ativo)"),
+    ("c=porto", D3, ""),
+    ("d=Lisboa", "2 de 5 entidades, 2 com dados", "(1 ativo)"),
+    ("d=desconhecido", "0 de 5 entidades, 0 com dados", "(1 ativo)"),
+    ("d=desconhecido&vazias=1", "1 de 5 entidades, 1 com dados", "(2 ativos)"),
+    ("contacto=1", D3, "(1 ativo)"),
+    ("contacto=1&estado=todos", D3, "(2 ativos)"),
+    ("estado=todo", "1 de 5 entidades, 0 com dados", "(1 ativo)"),
+    ("estado=ok", D3, ""),
+    ("estado=todos", "4 de 5 entidades, 3 com dados", "(1 ativo)"),
+    ("vazias=1", "4 de 5 entidades, 4 com dados", "(1 ativo)"),
+    ("estado=todos&vazias=1", "5 de 5 entidades, 4 com dados", "(2 ativos)"),
+    ("nome=zzz", "0 de 5 entidades, 0 com dados", "(1 ativo)"),
+    ("p=999&a=bogus&ord=zzz", D3, ""),
+    ("ord=morada", D3, ""),
+    ("ord=__proto__", D3, ""),
+    ("ord=constructor", D3, ""),
+    ("ord=toString", D3, ""),
+    ("a=constructor", D3, ""),
+    ("a=__proto__,toString", D3, "")]
+SORTS = [ALL + "ord=nome&dir=desc", ALL + "ord=local&dir=asc", ALL + "ord=local&dir=desc", ALL + "ord=distrito&dir=desc", ALL]
+SMALL = [c[0] for c in CASES] + SORTS
+BIG = [ALL + h for h in ["", "p=2", "p=12", "p=999", "p=0", "p=-5", "p=abc", "pp=50&p=3", "pp=7", "pp=abc", "pp=0",
+                         "p=2&nome=entidade%2001", "c=Vila%20do%20Conde", "d=Porto"]]
+ORPH = [ALL + "d=Lisboa", ALL + "d=Lisboa&c=Cascais", ALL]
 
 
-stored = lambda out: json.loads(out["stored"])
+def _edge_fixtures(fixture):
+    """The 5-row fixture plus an orphan (Local without Distrito) and a clash (Local in the wrong Distrito)."""
+    clone = lambda i: fixture[0].replace('id="e0001"', f'id="e000{i}"').replace("<td>0001</td>", f"<td>000{i}</td>")
+    orphan = clone(7).replace("<td>Lisboa</td>", DESC_TD, 1)  # Cascais with no Distrito (scrape failure)
+    clash = clone(8).replace("<td>Lisboa</td>", "<td>Porto</td>", 1)  # Cascais with Distrito Porto
+    assert orphan != fixture[0] and clash != fixture[0]
+    bad_url = fixture[0].replace("https://www.alfa.example", "https://a:99999")
+    assert bad_url != fixture[0]
+    return fixture + [orphan, clash], [bad_url] + fixture[1:]
+
+
+# Lists scenarios: name -> (JS body, hash, seed). Their assertions are in _part_lists_a / _part_lists_b.
+SCENARIOS = {}
+
+
+def scenario(name, body, h="", seed=LISTS_SEED):
+    SCENARIOS[name] = (body, h, seed)
+    return name
+
+
 FAV = ["Favoritas", [["e0002", "ligar"], ["e0004", ""], ["e0005", ""]]]
 view = ("out.tabs = $$('#listas .tab').map(b => b.textContent); out.notes = $$('.nota').map(i => i.value);"
         "out.rm = $$('.lst-rm').length; out.mail = $('[data-act=emails]').textContent;")
-
-
-def _part_filters():
-    with _page_env() as env:
-        if not env:
-            return
-        chrome, fixture, tmp = env
-        root = os.path.dirname(HERE)
-        small = Page(chrome, tmp, fixture).dump
-        ALL = "estado=todos&vazias=1&"
-        D3 = "3 de 5 entidades, 3 com dados"
-        CASES = [
-                ("", D3, ""), ("a=clinica", "2 de 5 entidades, 2 com dados", "(1 ativo)"),
-                ("a=clinica,neuropsicologia", D3, "(2 ativos)"),
-                ("a=", D3, ""),
-                ("c=Lisboa", "1 de 5 entidades, 1 com dados", "(1 ativo)"),
-                ("nome=agata", "1 de 5 entidades, 1 com dados", "(1 ativo)"),
-                ("nome=%C3%81GATA", "1 de 5 entidades, 1 com dados", "(1 ativo)"),
-                ("nome=epsilon", "0 de 5 entidades, 0 com dados", "(1 ativo)"),
-                ("nome=epsilon&vazias=1", "1 de 5 entidades, 1 com dados", "(2 ativos)"),
-                ("c=Porto", "1 de 5 entidades, 1 com dados", "(1 ativo)"),
-                ("c=porto", D3, ""),
-                ("d=Lisboa", "2 de 5 entidades, 2 com dados", "(1 ativo)"),
-                ("d=desconhecido", "0 de 5 entidades, 0 com dados", "(1 ativo)"),
-                ("d=desconhecido&vazias=1", "1 de 5 entidades, 1 com dados", "(2 ativos)"),
-                ("contacto=1", D3, "(1 ativo)"),
-                ("contacto=1&estado=todos", D3, "(2 ativos)"),
-                ("estado=todo", "1 de 5 entidades, 0 com dados", "(1 ativo)"),
-                ("estado=ok", D3, ""),
-                ("estado=todos", "4 de 5 entidades, 3 com dados", "(1 ativo)"),
-                ("vazias=1", "4 de 5 entidades, 4 com dados", "(1 ativo)"),
-                ("estado=todos&vazias=1", "5 de 5 entidades, 4 com dados", "(2 ativos)"),
-                ("nome=zzz", "0 de 5 entidades, 0 com dados", "(1 ativo)"),
-                ("p=999&a=bogus&ord=zzz", D3, ""),
-                ("ord=morada", D3, ""),
-                ("ord=__proto__", D3, ""),
-                ("ord=constructor", D3, ""),
-                ("ord=toString", D3, ""),
-                ("a=constructor", D3, ""),
-                ("a=__proto__,toString", D3, "")]
-        for (h, want, act), dom in zip(CASES, _pmap(small, [c[0] for c in CASES])):
-            assert _count(dom) == want, (h, _count(dom), want)
-            assert _ativos(dom) == act, (h, _ativos(dom))
-        for h in ["ord=__proto__", "ord=constructor", "a=constructor"]:
-            dom = small(h)
-            assert _ids(dom) == ["e0001", "e0003", "e0004"], h
-            assert 'id="rows" role="rowgroup" class="ready"' in dom or 'class="ready"' in dom, h
-
-        dom = small("nome=zzz")
-        assert _ids(dom) == [] and not re.search(r'<div id="vazio"[^>]*hidden', dom)
-        assert _disabled(dom) == 4 and _pager(dom) == "Página 1 de 1"
-        assert _disabled(small()) == 4 and _pager(small()) == "Página 1 de 1"
-        assert _ids(small("ord=morada")) == ["e0001", "e0003", "e0004"]
-
-        names = {re.match(r'<tr id="(e\d+)"', l).group(1): _fold(re.findall(r"<td>(.*?)</td>", l)[2])
-                 for l in fixture if "data-removed" not in l}
-        last = max(names, key=names.get)
-        assert last == "e0005" and _ids(small(ALL + "ord=nome&dir=desc"))[0] == last
-        dom = small(ALL + "ord=nome&dir=desc")
-        assert 'aria-sort="descending"' in _sort(dom, "nome") and "aria-sort" not in _sort(dom, "n")
-        assert 'aria-sort="ascending"' in _sort(small(), "n")
-        assert _ids(small(ALL + "ord=local&dir=asc")) == ["e0001", "e0003", "e0004", "e0002", "e0005"]
-        assert _ids(small(ALL + "ord=local&dir=desc")) == ["e0004", "e0003", "e0001", "e0002", "e0005"]
-        assert _ids(small(ALL + "ord=distrito&dir=desc")) == ["e0004", "e0001", "e0003", "e0002", "e0005"]
-
-        dom = small(ALL)
-        assert '<a href="tel:+351212345678">212 345 678</a>' in dom
-        assert '<a href="tel:+442079460958">+44 20 7946 0958</a>' in dom
-        assert 'href="https://www.alfa.example/" target="_blank" rel="noopener"' in dom
-        assert 'href="mailto:geral@alfa.example"' in dom
-        assert 'aria-label="Preenchido"' in dom and 'aria-label="Por preencher"' in dom
-        assert re.search(r'class="area"><span aria-hidden="true">🩺</span>Clínica e da Saúde</span>'
-                         r'<span class="area"><span aria-hidden="true">🎓</span>Educação</span>', dom)
-        assert "<i>indisponível</i>" in dom
-        assert "Café" not in small(ALL)
-
-
-
-def _part_paging():
-    with _page_env() as env:
-        if not env:
-            return
-        chrome, fixture, tmp = env
-        root = os.path.dirname(HERE)
-        small = Page(chrome, tmp, fixture).dump
-        ALL = "estado=todos&vazias=1&"
-        D3 = "3 de 5 entidades, 3 com dados"
-        _big = Page(chrome, tmp, _gen_rows()).dump
-        big = lambda h="": _big(ALL + h)
-        dom = big()
-        assert _count(dom) == "120 de 120 entidades, 60 com dados" and _pager(dom) == "Página 1 de 12"  # default 10 per page
-        assert len(_ids(dom)) == 10 and _ids(dom)[0] == "e0001" and _disabled(dom) == 2
-        assert 'data-p="prev"' in dom and re.findall(r'data-p="prev"[^>]*disabled', dom)
-        assert not re.findall(r'data-p="next"[^>]*disabled', dom)
-        dom = big("p=2")
-        assert _pager(dom) == "Página 2 de 12" and _ids(dom)[0] == "e0011" and len(_ids(dom)) == 10 and _disabled(dom) == 0
-        dom = big("p=12")
-        assert _pager(dom) == "Página 12 de 12" and len(_ids(dom)) == 10 and _ids(dom)[-1] == "e0120"
-        assert re.findall(r'data-p="next"[^>]*disabled', dom) and not re.findall(r'data-p="prev"[^>]*disabled', dom)
-        assert _pager(big("p=999")) == "Página 12 de 12"
-        for h in ["p=0", "p=-5", "p=abc"]:
-            assert _pager(big(h)) == "Página 1 de 12", h
-        dom = big("pp=50&p=3")  # per-page choice from the hash: 120 rows -> 50 + 50 + 20
-        assert _pager(dom) == "Página 3 de 3" and len(_ids(dom)) == 20 and _ids(dom)[0] == "e0101"
-        for h in ["pp=7", "pp=abc", "pp=0"]:  # not one of the choices: fall back to 10
-            assert _pager(big(h)) == "Página 1 de 12", h
-        dom = big("p=2&nome=entidade%2001")
-        assert _count(dom).startswith("10 de 120") and _pager(dom) == "Página 1 de 1"
-        assert _count(big("c=Vila%20do%20Conde")).startswith("30 de 120")
-        assert _count(big("d=Porto")).startswith("60 de 120")
-
-
-def _part_edge():
-    with _page_env() as env:
-        if not env:
-            return
-        chrome, fixture, tmp = env
-        root = os.path.dirname(HERE)
-        small = Page(chrome, tmp, fixture).dump
-        ALL = "estado=todos&vazias=1&"
-        D3 = "3 de 5 entidades, 3 com dados"
-        clone = lambda i: fixture[0].replace('id="e0001"', f'id="e000{i}"').replace("<td>0001</td>", f"<td>000{i}</td>")
-        orphan = clone(7).replace("<td>Lisboa</td>", DESC_TD, 1)  # Cascais with no Distrito (scrape failure)
-        clash = clone(8).replace("<td>Lisboa</td>", "<td>Porto</td>", 1)  # Cascais with Distrito Porto
-        assert orphan != fixture[0] and clash != fixture[0]
-        orph = Page(chrome, tmp, fixture + [orphan, clash]).dump
-        assert set(_ids(orph(ALL + "d=Lisboa"))) == {"e0001", "e0003", "e0007", "e0008"}  # Local Todos: Distrito OR a Lisboa local
-        assert set(_ids(orph(ALL + "d=Lisboa&c=Cascais"))) == {"e0001", "e0007", "e0008"}  # chosen Local wins
-        assert orph(ALL).count("Cascais fica em Lisboa, não em Porto") == 1  # warning only on the conflicting row
-        bad_url = fixture[0].replace("https://www.alfa.example", "https://a:99999")
-        assert bad_url != fixture[0]
-        dom = Page(chrome, tmp, [bad_url] + fixture[1:]).dump()
-        assert _count(dom) == D3 and 'class="ready"' in dom
-        assert "https://a:99999" in dom and 'href="https://a:99999' not in dom
-
-        runtime = os.path.join(tmp, "runtime.js")
-        with open(os.path.join(root, "app.js"), encoding="utf-8") as f:
-            src = f.read()
-        assert "  buildOptions();\n  if" in src
-        with open(runtime, "w", encoding="utf-8") as f:
-            f.write(src.replace("  buildOptions();\n  if", "  throw new Error('boom');\n  if"))
-        syntax = os.path.join(tmp, "syntax.js")
-        with open(syntax, "w", encoding="utf-8") as f:
-            f.write("this is not javascript(")
-        for script in (runtime, syntax):
-            dom = Page(chrome, tmp, fixture, script=script).dump(allow_err=True, wait=6000)
-            assert not re.search(r'<html[^>]*class="[^"]*\bjs\b', dom), script
-            assert len(_ids(dom)) == 6, script
-
-        trace = json.loads(html.unescape(re.search(r'data-trace="([^"]*)"', Page(chrome, tmp, _gen_rows(), TRACE).dump()).group(1)))
-        assert trace == ["#p=2", "#ord=nome", "#ord=nome&dir=desc", "#nome=entidade+01&ord=nome&dir=desc",
-                         "#nome=entidade+01&a=clinica&ord=nome&dir=desc", ""], trace
-
-
-
-def _part_lists_a():
-    with _page_env() as env:
-        if not env:
-            return
-        chrome, fixture, tmp = env
-        root = os.path.dirname(HERE)
-        lists = _lists_runner(chrome, tmp)
-        dom, out = lists(view, "l=Favoritas")  # a list shows all its members, even ⬜ ones that Estado would hide
-        assert _ids(dom) == ["e0002", "e0004", "e0005"] and _count(dom) == "3 de 3 entidades, 2 com dados"
-        assert out["tabs"] == ["Todas", "Favoritas3", "Vazia0", "+ Nova lista"] and out["notes"] == ["ligar", "", ""]
-        assert out["rm"] == 3 and out["mail"] == "Copiar e-mails (1)" and out["hash"] == "#l=Favoritas"
-        dom, out = lists(view, "l=Vazia")
-        assert _ids(dom) == [] and not re.search(r'<div id="lista-vazia"[^>]*hidden', dom) and re.search(r'<div id="vazio"[^>]*hidden', dom)
-        dom, out = lists(view, "l=Nope")  # unknown list: back to Todas
-        assert _count(dom).startswith("60 de 120") and out["rm"] == 0 and out["hash"] == ""
-
-        dom, out = lists("""const boxes = () => $$('.lst-menu input[type=checkbox]').map(c => [c.dataset.n, c.checked]);
+scenario("fav", view, "l=Favoritas")  # a list shows all its members, even ⬜ ones that Estado would hide
+scenario("vazia", view, "l=Vazia")
+scenario("nope", view, "l=Nope")  # unknown list: back to Todas
+scenario("menu", """const boxes = () => $$('.lst-menu input[type=checkbox]').map(c => [c.dataset.n, c.checked]);
   $('#rows [data-act=pick]').click();  // the list menu opens right under this card's ★
   out.menus = $$('.lst-menu').length; out.under = $('.lst-menu').closest('tr').id; out.cell = $('#rows [data-act=pick]').closest('td') === $('#rows .rep').closest('td') && $('.lst-menu').closest('td') === $('.rep').closest('td') && !!$('.rep').closest('td:nth-child(2)'); out.label = $('.lst-menu').getAttribute('aria-label');
   out.expanded = $('#rows [data-act=pick]').getAttribute('aria-expanded'); out.cbs = boxes();
@@ -683,13 +598,7 @@ def _part_lists_a():
   out.stays = $$('.lst-menu').length;  // ticking a box keeps the menu open
   $('.lst-menu input[type=text]').value = ' Nova '; $('.lst-menu [data-act=padd]').click();
   out.cbs2 = boxes(); out.star = $('#rows [data-act=pick]').textContent;""")
-        assert out["menus"] == 1 and out["under"] == "e0002" and out["label"] == "Listas de Entidade 002" and out["expanded"] == "true"
-        assert out["cell"]  # ★ and the report 🚩 share the Nº cell, and the menu hangs from it
-        assert out["cbs"] == [["Favoritas", True], ["Vazia", False]] and out["stays"] == 1
-        assert out["cbs2"] == [["Favoritas", True], ["Vazia", True], ["Nova", True]] and out["star"] == "★"
-        assert stored(out) == [FAV, ["Vazia", [["e0002", ""]]], ["Nova", [["e0002", ""]]]]
-
-        dom, out = lists("""const stars = () => $$('#rows [data-act=pick]'), menus = () => $$('.lst-menu').length;
+scenario("stars", """const stars = () => $$('#rows [data-act=pick]'), menus = () => $$('.lst-menu').length;
   stars()[0].click(); out.a = menus();                                    // open
   stars()[1].click(); out.b = menus(); out.where = $('.lst-menu').closest('tr').id;  // another ★: the menu moves, never two
   document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'})); out.c = menus();  // Esc closes
@@ -697,15 +606,10 @@ def _part_lists_a():
   stars()[0].click(); document.body.click(); out.d = menus();                // click elsewhere closes
   stars()[0].click(); stars()[0].click(); out.e = menus();                   // same ★ again closes
   stars()[0].click(); $('.lst-menu').click(); out.f = menus();               // click inside does not""")
-        assert [out[k] for k in "abcdef"] == [1, 1, 0, 0, 0, 1] and out["where"] == "e0004" and out["focus"] == "e0004", out
-
-        dom, out = lists("""$('.lst-rm').click();
+scenario("rmnote", """$('.lst-rm').click();
   const n = $('.nota'); n.value = 'novo'; n.dispatchEvent(new Event('input', {bubbles: true}));
   out.ids = $$('#rows tr').map(r => r.id);""", "l=Favoritas")  # remove a member, then edit the next one's note
-        assert out["ids"] == ["e0004", "e0005"]
-        assert stored(out) == [["Favoritas", [["e0004", "novo"], ["e0005", ""]]], ["Vazia", []]]
-
-        dom, out = lists("""const n = $('.nota'), ind = () => $('.guardado'), sleep = ms => new Promise(r => setTimeout(r, ms));
+scenario("saved", """const n = $('.nota'), ind = () => $('.guardado'), sleep = ms => new Promise(r => setTimeout(r, ms));
   out.tag = n.tagName; out.hidden0 = ind().hidden;
   n.value = 'linha 1\\nlinha 2'; n.dispatchEvent(new Event('input', {bubbles: true}));
   out.ok = ind().textContent; out.shown = !ind().hidden; out.bad1 = ind().classList.contains('bad');
@@ -714,14 +618,8 @@ def _part_lists_a():
   Storage.prototype.setItem = () => { throw new Error('full'); };  // from here the browser refuses to store
   n.value = 'perdida'; n.dispatchEvent(new Event('input', {bubbles: true}));
   out.fail = ind().textContent; out.bad2 = ind().classList.contains('bad');
-  await sleep(1700); out.stays = !ind().hidden;""", "l=Favoritas", wait=6000)
-        assert out["tag"] == "TEXTAREA" and out["hidden0"] and out["ok"].startswith("✓") and out["shown"] and not out["bad1"]
-        assert out["faded"], "the ✓ fades"
-        assert out["clear"], "the note must end before the contact column"
-        assert stored(out)[0][1][0] == ["e0002", "linha 1\nlinha 2"]  # newline kept; the refused write never reached storage
-        assert out["fail"].startswith("⚠") and out["bad2"] and out["stays"], "a failed save is flagged and stays visible"
-
-        dom, out = lists("""const notes = () => $$('.nota').map(n => [n.dataset.l, n.dataset.r, n.value]);
+  await sleep(1700); out.stays = !ind().hidden;""", "l=Favoritas")
+scenario("notes", """const notes = () => $$('.nota').map(n => [n.dataset.l, n.dataset.r, n.value]);
   const box = i => $$('.lst-menu input[type=checkbox]')[i], setBox = (i, on) => { box(i).checked = on; box(i).dispatchEvent(new Event('change', {bubbles: true})); };
   out.n0 = notes(); out.labels = $$('.nota-l').map(l => l.textContent); out.none = $$('#e0006 .nota').length;  // Todas: notes only on entities that are in a list
   $('#rows [data-act=pick]').click(); setBox(1, true);                    // add e0002 to Vazia as well: a second, labelled note appears
@@ -730,69 +628,308 @@ def _part_lists_a():
   window.confirm = () => { out.asked = (out.asked || 0) + 1; return false; };
   setBox(0, false); out.kept = box(0).checked; out.n2 = notes();          // Favoritas holds a note: asked, cancelled, still there
   window.confirm = () => true; setBox(0, false); out.n3 = notes();         // confirmed: gone, the other list's note untouched""")
-        assert out["n0"] == [["Favoritas", "e0002", "ligar"], ["Favoritas", "e0004", ""]] and out["labels"] == ["Favoritas", "Favoritas"] and out["none"] == 0
-        assert out["n1"] == [["Favoritas", "e0002", "ligar"], ["Vazia", "e0002", ""], ["Favoritas", "e0004", ""]]
-        assert out["asked"] == 1 and out["kept"] and out["n2"] == [["Favoritas", "e0002", "ligar"], ["Vazia", "e0002", "outra"], ["Favoritas", "e0004", ""]]
-        assert out["n3"] == [["Vazia", "e0002", "outra"], ["Favoritas", "e0004", ""]]
-        assert stored(out) == [["Favoritas", [["e0004", ""], ["e0005", ""]]], ["Vazia", [["e0002", "outra"]]]]
-
-        dom, out = lists("""window.confirm = () => { out.asked = (out.asked || 0) + 1; return false; };
+scenario("rmask", """window.confirm = () => { out.asked = (out.asked || 0) + 1; return false; };
   $('.lst-rm').click(); out.after1 = $$('#rows tr').length;             // e0002 has a note: asked, cancelled, kept
   $$('.lst-rm')[1].click(); out.after2 = $$('#rows tr').length;         // e0004 has none: removed without asking""", "l=Favoritas")
-        assert out["asked"] == 1 and out["after1"] == 3 and out["after2"] == 2
-
-
-
-def _part_lists_b():
-    with _page_env() as env:
-        if not env:
-            return
-        chrome, fixture, tmp = env
-        root = os.path.dirname(HERE)
-        lists = _lists_runner(chrome, tmp)
-        dom, out = lists("window.prompt = () => ' Teste '; $('[data-act=new]').click();")
-        assert out["hash"] == "#l=Teste" and stored(out) == [FAV, ["Vazia", []], ["Teste", []]]
-        dom, out = lists("$('[data-act=del]').click();", "l=Favoritas")
-        assert out["hash"] == "" and stored(out) == [["Vazia", []]]
-
-        dom, out = lists("""const n = $('.nota'); n.value = '=1+1\\nsegunda'; n.dispatchEvent(new Event('input', {bubbles: true}));
+scenario("new", "window.prompt = () => ' Teste '; $('[data-act=new]').click();")
+scenario("del", "$('[data-act=del]').click();", "l=Favoritas")
+scenario("export", """const n = $('.nota'); n.value = '=1+1\\nsegunda'; n.dispatchEvent(new Event('input', {bubbles: true}));
   $('[data-act=emails]').click(); out.mails = out.copied;
   $('[data-act=csv]').click(); out.csv = out.blob; out.csvFile = out.file;
   $('[data-act=link]').click(); out.link = out.copied;""", "l=Favoritas")
-        assert out["mails"] == "a@x.example" and out["csvFile"] == "favoritas.csv"
-        rows = out["csv"].split("\r\n")
-        assert rows[0] == '\ufeff"Nº";"Nome";"Local";"Distrito";"Morada";"E-mail";"Telefone";"Website";"Seguimento";"Nota"'
-        assert rows[1] == '"2";"Entidade 002";"Amarante";"Porto";"Rua X 1";"a@x.example";"210 000 000";"https://x.example";"Por ver";"\'=1+1\nsegunda"'
-        assert rows[3] == '"5";"Entidade 005";"";"";"";"";"";"";"Por ver";""' and len(rows) == 4
-        assert out["link"].endswith("#share=Favoritas%3A0002,0004,0005")
-
-        dom, out = lists("""out.banner = $('#partilha').textContent; out.shown = !$('#partilha').hidden;
+scenario("share", """out.banner = $('#partilha').textContent; out.shown = !$('#partilha').hidden;
   $('[data-act=shsave]').click(); out.gone = $('#partilha').hidden;""", "share=Amigos%3A0001,0003,9999,xx,0003")
-        assert "Amigos" in out["banner"] and "2 entidades" in out["banner"] and out["shown"] and out["gone"]  # 9999, xx and the duplicate dropped
-        assert out["hash"] == "#l=Amigos" and stored(out) == [FAV, ["Vazia", []], ["Amigos", [["e0001", ""], ["e0003", ""]]]]
-        dom, out = lists("$('[data-act=shskip]').click();", "share=Amigos%3A0001")
-        assert out["hash"] == "" and len(stored(out)) == 2
-        assert lists("out.shown = !$('#partilha').hidden;", "share=garbage")[1]["shown"] is False
-
-        dom, out = lists("""$('[data-act=exp]').click(); out.backup = out.blob; out.file2 = out.file;
+scenario("shskip", "$('[data-act=shskip]').click();", "share=Amigos%3A0001")
+scenario("garbage", "out.shown = !$('#partilha').hidden;", "share=garbage")
+scenario("backup", """$('[data-act=exp]').click(); out.backup = out.blob; out.file2 = out.file;
   const dt = new DataTransfer(); dt.items.add(new File([JSON.stringify([['Importada', [['e0001', 'x'], ['bad', 'y']]], ['Favoritas', [['e0003', '']]]])], 'l.json'));
-  $('#imp-f').files = dt.files; $('#imp-f').dispatchEvent(new Event('change')); await tick(); await tick();""")
-        assert out["file2"] == "abre-portas-listas.json" and json.loads(out["backup"]) == [FAV, ["Vazia", []]]
-        assert out["alert"] == "Listas importadas."
-        assert stored(out) == [["Favoritas", FAV[1] + [["e0003", ""]]], ["Vazia", []], ["Importada", [["e0001", "x"]]]]
-        dom, out = lists("""const dt = new DataTransfer(); dt.items.add(new File(['{nope'], 'l.json'));
-  $('#imp-f').files = dt.files; $('#imp-f').dispatchEvent(new Event('change')); await tick(); await tick();""")
-        assert out["alert"].startswith("Ficheiro inválido") and stored(out) == [FAV, ["Vazia", []]]
-
-        dom, out = lists(view, seed="'{bad'")  # corrupt storage: page still works, no lists
-        assert out["tabs"] == ["Todas", "+ Nova lista"] and _count(dom).startswith("60 de 120")
-        dom, out = lists(view, seed="""JSON.stringify([["__proto__", [["e0002", "x"], ["__proto__", "y"]]], ["ok", [["e0003"]]], [" ", []]])""")
-        assert out["tabs"] == ["Todas", "__proto__1", "ok1", "+ Nova lista"], out["tabs"]  # hostile names are plain names; bad ids and blank names dropped
+  $('#imp-f').files = dt.files; $('#imp-f').dispatchEvent(new Event('change'));
+  for (let i = 0; i < 40 && !out.alert; i++) await tick();  // reading the file takes real time, not virtual""")
+scenario("badfile", """const dt = new DataTransfer(); dt.items.add(new File(['{nope'], 'l.json'));
+  $('#imp-f').files = dt.files; $('#imp-f').dispatchEvent(new Event('change'));
+  for (let i = 0; i < 40 && !out.alert; i++) await tick();  // reading the file takes real time, not virtual""")
+scenario("corrupt", view, seed="'{bad'")  # corrupt storage: page still works, no lists
+scenario("hostile", view, seed="""JSON.stringify([["__proto__", [["e0002", "x"], ["__proto__", "y"]]], ["ok", [["e0003"]]], [" ", []]])""")
 
 
+def _jobs(tmp, fixture):
+    """Every page job: [(id, page path, hash, virtual ms it may take)]; sweeps carry their hashes in the page."""
+    jobs, rows = [], _gen_rows()
+    sweep = lambda id_, fx, hashes: jobs.append((id_, Page(tmp, fx, SWEEP.replace("%HASHES%", json.dumps(hashes))).path, hashes[0], 20000))
+    orph_rows, bad_rows = _edge_fixtures(fixture)
+    sweep("small", fixture, SMALL)
+    sweep("big", rows, BIG)
+    sweep("orph", orph_rows, ORPH)
+    sweep("badurl", bad_rows, [""])
+    for name, (body, h, seed) in SCENARIOS.items():
+        jobs.append(("lists:" + name, Page(tmp, rows, LISTS_JS.replace("%SEED%", seed).replace("%BODY%", body)).path, h, 20000))
+    jobs.append(("trace", Page(tmp, rows, TRACE).path, "", 20000))
+    with open(os.path.join(os.path.dirname(HERE), "app.js"), encoding="utf-8") as f:
+        src = f.read()
+    assert "  buildOptions();\n  if" in src
+    runtime, syntax = os.path.join(tmp, "runtime.js"), os.path.join(tmp, "syntax.js")
+    with open(runtime, "w", encoding="utf-8") as f:
+        f.write(src.replace("  buildOptions();\n  if", "  throw new Error('boom');\n  if"))
+    with open(syntax, "w", encoding="utf-8") as f:
+        f.write("this is not javascript(")
+    for name, script, settle in (("runtime", runtime, 4600), ("syntax", syntax, 4600),  # the page gives up on app.js after 4s
+                                 ("runtime-early", runtime, 1500)):  # ...but a thrown error must not wait for that
+        jobs.append((name, Page(tmp, fixture, script=script, settle=settle).path, "", 20000))
+    return jobs
 
 
-PAGE_PARTS = [_part_filters, _part_paging, _part_edge, _part_lists_a, _part_lists_b]  # independent: main() runs them side by side
+def _launch(chrome, tmp, jobs):
+    """One headless Chrome that loads `jobs` one after another; {job id: what it reported}."""
+    listing = [{"id": i, "url": f"file://{p}#{h}", "limit": lim} for i, p, h, lim in jobs]
+    parent = os.path.join(tmp, f"parent{next(_PAGE_N)}.html")
+    with open(parent, "w", encoding="utf-8") as f:
+        f.write(PARENT.replace("%JOBS%", json.dumps(listing).replace("</", "<\\/")))
+    profile = tempfile.mkdtemp(dir=tmp)  # one per launch, so launches can overlap
+    r = subprocess.run([chrome, "--headless", "--disable-gpu", "--no-sandbox", "--no-first-run", "--dump-dom",
+                        f"--virtual-time-budget={sum(j[3] for j in jobs) + 10000}", f"--user-data-dir={profile}",
+                        f"file://{parent}"], capture_output=True, text=True, timeout=300)
+    assert r.returncode == 0, r.stderr
+    m = re.search(r'data-res="([^"]*)"', r.stdout)
+    assert m, "the page jobs did not finish: " + r.stdout[:300]
+    return json.loads(html.unescape(m.group(1)))
+
+
+class Results:
+    """What the page jobs reported, with the readers the assertions use."""
+
+    def __init__(self, res):
+        self.res = res
+
+    def job(self, id_, allow_err=False):
+        m = self.res.get(id_)
+        assert m is not None and not m.get("timeout"), (id_, "did not finish", m and m.get("errs"))
+        assert allow_err or not m["errs"], (id_, "page error", m["errs"])
+        return m
+
+    def sweep(self, id_, hashes):
+        """A function hash -> the DOM after the page was moved to that hash (like a fresh `dump(hash)`)."""
+        m = self.job(id_)
+        snaps = dict(zip(hashes, m["snaps"]))
+        assert len(snaps) == len(set(hashes)) and all("data-err" not in s for s in snaps.values()), (id_, "page error")
+
+        def at(h=""):
+            assert h in snaps, (id_, h, "hash not in the sweep list")
+            return snaps[h]
+        return at
+
+    def lists(self, name):
+        """(dom, out) of a lists scenario."""
+        m = self.job("lists:" + name)
+        assert "error" not in m["out"], (name, m["out"]["error"])
+        return m["dom"], m["out"]
+
+
+_RESULTS, _RESULTS_LOCK = None, threading.Lock()
+
+
+def _results():
+    """Run every page job once (in CHROME_JOBS launches, side by side); None when there is no Chrome to run."""
+    global _RESULTS
+    with _RESULTS_LOCK:
+        chrome = _need_chrome()
+        if not chrome:
+            return None
+        if _RESULTS is None:
+            try:
+                with tempfile.TemporaryDirectory() as tmp:
+                    jobs = _jobs(tmp, _fixture())
+                    bins = [jobs[i::CHROME_JOBS] for i in range(CHROME_JOBS)]
+                    with concurrent.futures.ThreadPoolExecutor(CHROME_JOBS) as ex:
+                        parts = list(ex.map(lambda b: _launch(chrome, tmp, b), [b for b in bins if b]))
+                _RESULTS = Results({k: v for p in parts for k, v in p.items()})
+            except Exception as e:  # every part reports the same failure, but the launches run once
+                _RESULTS = e
+        if isinstance(_RESULTS, Exception):
+            raise _RESULTS
+        return _RESULTS
+
+
+stored = lambda out: json.loads(out["stored"])
+
+
+def _part_filters():
+    R = _results()
+    if not R:
+        return
+    fixture = _fixture()
+    small = R.sweep("small", SMALL)
+    for h, want, act in CASES:
+        dom = small(h)
+        assert _count(dom) == want, (h, _count(dom), want)
+        assert _ativos(dom) == act, (h, _ativos(dom))
+    for h in ["ord=__proto__", "ord=constructor", "a=constructor"]:
+        dom = small(h)
+        assert _ids(dom) == ["e0001", "e0003", "e0004"], h
+        assert 'id="rows" role="rowgroup" class="ready"' in dom or 'class="ready"' in dom, h
+
+    dom = small("nome=zzz")
+    assert _ids(dom) == [] and not re.search(r'<div id="vazio"[^>]*hidden', dom)
+    assert _disabled(dom) == 4 and _pager(dom) == "Página 1 de 1"
+    assert _disabled(small()) == 4 and _pager(small()) == "Página 1 de 1"
+    assert _ids(small("ord=morada")) == ["e0001", "e0003", "e0004"]
+
+    names = {re.match(r'<tr id="(e\d+)"', l).group(1): _fold(re.findall(r"<td>(.*?)</td>", l)[2])
+             for l in fixture if "data-removed" not in l}
+    last = max(names, key=names.get)
+    assert last == "e0005" and _ids(small(ALL + "ord=nome&dir=desc"))[0] == last
+    dom = small(ALL + "ord=nome&dir=desc")
+    assert 'aria-sort="descending"' in _sort(dom, "nome") and "aria-sort" not in _sort(dom, "n")
+    assert 'aria-sort="ascending"' in _sort(small(), "n")
+    assert _ids(small(ALL + "ord=local&dir=asc")) == ["e0001", "e0003", "e0004", "e0002", "e0005"]
+    assert _ids(small(ALL + "ord=local&dir=desc")) == ["e0004", "e0003", "e0001", "e0002", "e0005"]
+    assert _ids(small(ALL + "ord=distrito&dir=desc")) == ["e0004", "e0001", "e0003", "e0002", "e0005"]
+
+    dom = small(ALL)
+    assert '<a href="tel:+351212345678">212 345 678</a>' in dom
+    assert '<a href="tel:+442079460958">+44 20 7946 0958</a>' in dom
+    assert 'href="https://www.alfa.example/" target="_blank" rel="noopener"' in dom
+    assert 'href="mailto:geral@alfa.example"' in dom
+    assert 'aria-label="Preenchido"' in dom and 'aria-label="Por preencher"' in dom
+    assert re.search(r'class="area"><span aria-hidden="true">🩺</span>Clínica e da Saúde</span>'
+                     r'<span class="area"><span aria-hidden="true">🎓</span>Educação</span>', dom)
+    assert "<i>indisponível</i>" in dom
+    assert "Café" not in small(ALL)
+
+
+def _part_paging():
+    R = _results()
+    if not R:
+        return
+    _big = R.sweep("big", BIG)
+    big = lambda h="": _big(ALL + h)
+    dom = big()
+    assert _count(dom) == "120 de 120 entidades, 60 com dados" and _pager(dom) == "Página 1 de 12"  # default 10 per page
+    assert len(_ids(dom)) == 10 and _ids(dom)[0] == "e0001" and _disabled(dom) == 2
+    assert 'data-p="prev"' in dom and re.findall(r'data-p="prev"[^>]*disabled', dom)
+    assert not re.findall(r'data-p="next"[^>]*disabled', dom)
+    dom = big("p=2")
+    assert _pager(dom) == "Página 2 de 12" and _ids(dom)[0] == "e0011" and len(_ids(dom)) == 10 and _disabled(dom) == 0
+    dom = big("p=12")
+    assert _pager(dom) == "Página 12 de 12" and len(_ids(dom)) == 10 and _ids(dom)[-1] == "e0120"
+    assert re.findall(r'data-p="next"[^>]*disabled', dom) and not re.findall(r'data-p="prev"[^>]*disabled', dom)
+    assert _pager(big("p=999")) == "Página 12 de 12"
+    for h in ["p=0", "p=-5", "p=abc"]:
+        assert _pager(big(h)) == "Página 1 de 12", h
+    dom = big("pp=50&p=3")  # per-page choice from the hash: 120 rows -> 50 + 50 + 20
+    assert _pager(dom) == "Página 3 de 3" and len(_ids(dom)) == 20 and _ids(dom)[0] == "e0101"
+    for h in ["pp=7", "pp=abc", "pp=0"]:  # not one of the choices: fall back to 10
+        assert _pager(big(h)) == "Página 1 de 12", h
+    dom = big("p=2&nome=entidade%2001")
+    assert _count(dom).startswith("10 de 120") and _pager(dom) == "Página 1 de 1"
+    assert _count(big("c=Vila%20do%20Conde")).startswith("30 de 120")
+    assert _count(big("d=Porto")).startswith("60 de 120")
+
+
+def _part_edge():
+    R = _results()
+    if not R:
+        return
+    orph = R.sweep("orph", ORPH)
+    assert set(_ids(orph(ALL + "d=Lisboa"))) == {"e0001", "e0003", "e0007", "e0008"}  # Local Todos: Distrito OR a Lisboa local
+    assert set(_ids(orph(ALL + "d=Lisboa&c=Cascais"))) == {"e0001", "e0007", "e0008"}  # chosen Local wins
+    assert orph(ALL).count("Cascais fica em Lisboa, não em Porto") == 1  # warning only on the conflicting row
+    dom = R.sweep("badurl", [""])()
+    assert _count(dom) == D3 and 'class="ready"' in dom
+    assert "https://a:99999" in dom and 'href="https://a:99999' not in dom
+
+    for script in ("runtime", "syntax", "runtime-early"):
+        dom = R.job(script, allow_err=True)["dom"]
+        assert not re.search(r'<html[^>]*class="[^"]*\bjs\b', dom), script
+        assert len(_ids(dom)) == 6, script
+
+    trace = R.job("trace")["trace"]
+    assert trace == ["#p=2", "#ord=nome", "#ord=nome&dir=desc", "#nome=entidade+01&ord=nome&dir=desc",
+                     "#nome=entidade+01&a=clinica&ord=nome&dir=desc", ""], trace
+
+
+def _part_lists_a():
+    R = _results()
+    if not R:
+        return
+    dom, out = R.lists("fav")  # a list shows all its members, even ⬜ ones that Estado would hide
+    assert _ids(dom) == ["e0002", "e0004", "e0005"] and _count(dom) == "3 de 3 entidades, 2 com dados"
+    assert out["tabs"] == ["Todas", "Favoritas3", "Vazia0", "+ Nova lista"] and out["notes"] == ["ligar", "", ""]
+    assert out["rm"] == 3 and out["mail"] == "Copiar e-mails (1)" and out["hash"] == "#l=Favoritas"
+    dom, out = R.lists("vazia")
+    assert _ids(dom) == [] and not re.search(r'<div id="lista-vazia"[^>]*hidden', dom) and re.search(r'<div id="vazio"[^>]*hidden', dom)
+    dom, out = R.lists("nope")  # unknown list: back to Todas
+    assert _count(dom).startswith("60 de 120") and out["rm"] == 0 and out["hash"] == ""
+
+    dom, out = R.lists("menu")
+    assert out["menus"] == 1 and out["under"] == "e0002" and out["label"] == "Listas de Entidade 002" and out["expanded"] == "true"
+    assert out["cell"]  # ★ and the report 🚩 share the Nº cell, and the menu hangs from it
+    assert out["cbs"] == [["Favoritas", True], ["Vazia", False]] and out["stays"] == 1
+    assert out["cbs2"] == [["Favoritas", True], ["Vazia", True], ["Nova", True]] and out["star"] == "★"
+    assert stored(out) == [FAV, ["Vazia", [["e0002", ""]]], ["Nova", [["e0002", ""]]]]
+
+    dom, out = R.lists("stars")
+    assert [out[k] for k in "abcdef"] == [1, 1, 0, 0, 0, 1] and out["where"] == "e0004" and out["focus"] == "e0004", out
+
+    dom, out = R.lists("rmnote")
+    assert out["ids"] == ["e0004", "e0005"]
+    assert stored(out) == [["Favoritas", [["e0004", "novo"], ["e0005", ""]]], ["Vazia", []]]
+
+    dom, out = R.lists("saved")
+    assert out["tag"] == "TEXTAREA" and out["hidden0"] and out["ok"].startswith("✓") and out["shown"] and not out["bad1"]
+    assert out["faded"], "the ✓ fades"
+    assert out["clear"], "the note must end before the contact column"
+    assert stored(out)[0][1][0] == ["e0002", "linha 1\nlinha 2"]  # newline kept; the refused write never reached storage
+    assert out["fail"].startswith("⚠") and out["bad2"] and out["stays"], "a failed save is flagged and stays visible"
+
+    dom, out = R.lists("notes")
+    assert out["n0"] == [["Favoritas", "e0002", "ligar"], ["Favoritas", "e0004", ""]] and out["labels"] == ["Favoritas", "Favoritas"] and out["none"] == 0
+    assert out["n1"] == [["Favoritas", "e0002", "ligar"], ["Vazia", "e0002", ""], ["Favoritas", "e0004", ""]]
+    assert out["asked"] == 1 and out["kept"] and out["n2"] == [["Favoritas", "e0002", "ligar"], ["Vazia", "e0002", "outra"], ["Favoritas", "e0004", ""]]
+    assert out["n3"] == [["Vazia", "e0002", "outra"], ["Favoritas", "e0004", ""]]
+    assert stored(out) == [["Favoritas", [["e0004", ""], ["e0005", ""]]], ["Vazia", [["e0002", "outra"]]]]
+
+    dom, out = R.lists("rmask")
+    assert out["asked"] == 1 and out["after1"] == 3 and out["after2"] == 2
+
+
+def _part_lists_b():
+    R = _results()
+    if not R:
+        return
+    dom, out = R.lists("new")
+    assert out["hash"] == "#l=Teste" and stored(out) == [FAV, ["Vazia", []], ["Teste", []]]
+    dom, out = R.lists("del")
+    assert out["hash"] == "" and stored(out) == [["Vazia", []]]
+
+    dom, out = R.lists("export")
+    assert out["mails"] == "a@x.example" and out["csvFile"] == "favoritas.csv"
+    rows = out["csv"].split("\r\n")
+    assert rows[0] == '﻿"Nº";"Nome";"Local";"Distrito";"Morada";"E-mail";"Telefone";"Website";"Seguimento";"Nota"'
+    assert rows[1] == '"2";"Entidade 002";"Amarante";"Porto";"Rua X 1";"a@x.example";"210 000 000";"https://x.example";"Por ver";"\'=1+1\nsegunda"'
+    assert rows[3] == '"5";"Entidade 005";"";"";"";"";"";"";"Por ver";""' and len(rows) == 4
+    assert out["link"].endswith("#share=Favoritas%3A0002,0004,0005")
+
+    dom, out = R.lists("share")
+    assert "Amigos" in out["banner"] and "2 entidades" in out["banner"] and out["shown"] and out["gone"]  # 9999, xx and the duplicate dropped
+    assert out["hash"] == "#l=Amigos" and stored(out) == [FAV, ["Vazia", []], ["Amigos", [["e0001", ""], ["e0003", ""]]]]
+    dom, out = R.lists("shskip")
+    assert out["hash"] == "" and len(stored(out)) == 2
+    assert R.lists("garbage")[1]["shown"] is False
+
+    dom, out = R.lists("backup")
+    assert out["file2"] == "abre-portas-listas.json" and json.loads(out["backup"]) == [FAV, ["Vazia", []]]
+    assert out["alert"] == "Listas importadas."
+    assert stored(out) == [["Favoritas", FAV[1] + [["e0003", ""]]], ["Vazia", []], ["Importada", [["e0001", "x"]]]]
+    dom, out = R.lists("badfile")
+    assert out["alert"].startswith("Ficheiro inválido") and stored(out) == [FAV, ["Vazia", []]]
+
+    dom, out = R.lists("corrupt")
+    assert out["tabs"] == ["Todas", "+ Nova lista"] and _count(dom).startswith("60 de 120")
+    dom, out = R.lists("hostile")
+    assert out["tabs"] == ["Todas", "__proto__1", "ok1", "+ Nova lista"], out["tabs"]  # hostile names are plain names; bad ids and blank names dropped
+
+
+PAGE_PARTS = [_part_filters, _part_paging, _part_edge, _part_lists_a, _part_lists_b]
 
 
 def test_page():
@@ -810,16 +947,14 @@ def main():
             traceback.print_exc()
             sys.exit(1)
         print(f"ok   {name}")
-    with concurrent.futures.ThreadPoolExecutor(len(PAGE_PARTS)) as ex:  # test_page: its parts run side by side
-        futs = {ex.submit(p): p.__name__ for p in PAGE_PARTS}
-        failed = []
-        for f in concurrent.futures.as_completed(futs):
-            try:
-                f.result()
-            except Exception:
-                failed.append(futs[f])
-                print(f"FAIL {futs[f]}")
-                traceback.print_exc()
+    failed = []
+    for part in PAGE_PARTS:  # test_page: the page jobs run in a few launches (first part), then every part asserts
+        try:
+            part()
+        except Exception:
+            failed.append(part.__name__)
+            print(f"FAIL {part.__name__}")
+            traceback.print_exc()
     if failed:
         sys.exit(1)
     print("ok   test_page")

@@ -3,6 +3,7 @@
 
 JSON keys: local distrito morada areas(list) adicional website email telefone sources(list).
 Missing/null/empty values become the <i>indisponível</i>/<i>desconhecido</i> placeholders.
+Key `private: true` writes a 🔒 row instead: all placeholders, no data-src, other keys ignored.
 Nome, Nº and the row shape come from this script and the existing row, never from the JSON.
 """
 import json
@@ -18,10 +19,15 @@ def esc(s):
 
 
 def build(old, d):
-    """Return the new ✅ row for the old row line and research dict d."""
+    """Return the new ✅ (or 🔒 if d["private"]) row for the old row line and research dict d."""
     cells = re.findall(r'<td>(.*?)</td>', old)
     val = lambda k, dflt=IND: esc(str(d[k])) if d.get(k) else dflt
     areas = ' '.join(d.get('areas') or []) or DESC
+    if d.get('private'):
+        new = ['🔒', cells[1], cells[2], IND, DESC, IND, DESC, IND, IND, IND, IND]
+        rid = re.match(r'<tr id="(e\d+)"', old).group(1)
+        flag = ' data-removed="1"' if ' data-removed="1"' in old[:old.index('>')] else ''
+        return f'<tr id="{rid}"{flag}>' + ''.join(f'<td>{c}</td>' for c in new) + '</tr>'
     new = ['✅', cells[1], cells[2], val('local'), val('distrito', DESC), val('morada'),
            areas, val('adicional'), val('website'), val('email'), val('telefone')]
     rid = re.match(r'<tr id="(e\d+)"', old).group(1)

@@ -68,10 +68,10 @@ def check_row(line):
         return [f'expected 11 cells, got {len(cells)}']
     errs = []
     status = cells[0]
-    if status not in ('⬜', '✅'):
+    if status not in ('⬜', '✅', '🔒'):
         return [f'Status: unknown value {status!r}']
-    if src and status == '⬜':
-        errs.append('data-src: not allowed on a ⬜ row')
+    if src and status != '✅':
+        errs.append(f'data-src: not allowed on a {status} row')
     if cells[1] != rid:
         errs.append(f'Nº: {cells[1]!r} does not match id {rid}')
     if not TEXT.fullmatch(cells[2]):
@@ -81,6 +81,9 @@ def check_row(line):
         if status == '⬜':
             if v != '':
                 errs.append(f'{NAMES[i]}: must be empty on a ⬜ row')
+        elif status == '🔒':
+            if v not in (IND, DESC):
+                errs.append(f'{NAMES[i]}: must be indisponível/desconhecido on a 🔒 row')
         elif not _filled_ok(i, v):
             errs.append(f'{NAMES[i]}: invalid value {v!r} on a ✅ row')
     if status == '✅' and not errs:
@@ -164,8 +167,8 @@ def _entity(old, new, branch):
     if not (m and n):
         return errs or [f'e{rid}: old row is malformed']
     oc, nc = CELLS.findall(m.group(3)), CELLS.findall(n.group(3))
-    if nc[0] != '✅':
-        errs.append(f'e{rid}: new row must be ✅')
+    if nc[0] not in ('✅', '🔒'):
+        errs.append(f'e{rid}: new row must be ✅ or 🔒')
     if oc[2] != nc[2]:
         errs.append(f'e{rid}: Nome changed')
     if (FLAG in m.group(2)) != (FLAG in n.group(2)):
@@ -232,9 +235,10 @@ def main(argv):
     text = open(argv[1], encoding='utf-8').read()
     todo = len(re.findall(r'^<tr id="e\d+"[^>]*><td>⬜', text, re.M))
     done = len(re.findall(r'^<tr id="e\d+"[^>]*><td>✅', text, re.M))
+    priv = len(re.findall(r'^<tr id="e\d+"[^>]*><td>🔒', text, re.M))
     for e in errs:
         print(e)
-    print(f'rows: {todo + done}  ⬜ {todo}  ✅ {done}')
+    print(f'rows: {todo + done + priv}  ⬜ {todo}  ✅ {done}  🔒 {priv}')
     return 1 if errs else 0
 
 

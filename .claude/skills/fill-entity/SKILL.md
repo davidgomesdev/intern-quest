@@ -18,6 +18,7 @@ grep '^<tr id="eID"[ >]' REPO/index.html
 ```
 
 - No output: before concluding the row is missing, check you kept the `e` prefix and the full zero-padded number, and run it once more. Still nothing: the id does not exist or is flagged `data-removed`. Stop, report it.
+- Second cell is `🔒`: already marked private individual. Stop, report it.
 - Second cell is `✅`: already filled. Stop, report it. Exception, a refill: Website and Telefone are both `<i>indisponível</i>`. Then go on, and treat the existing cells as leads, not facts: keep a value only if a page you open confirms it.
 - Otherwise the third `<td>` is the Nome. Copy it exactly. Never change it.
 
@@ -61,6 +62,10 @@ Use the Morada you collected (never the entity's name or memory), and the lists 
 
 A row where every field is indisponível/desconhecido is valid: it means "searched, found nothing". Do not spend more than about 10 searches.
 
+### Private individual (🔒)
+
+If research shows the entity is clearly a natural person (not a company, association, IPSS, public body or any other organisation) and no page gives public business data for them, do not publish anything. Write the JSON `{"private": true}` (see section 3). This is not FAILED and not a ⬜ row left behind: 🔒 marks the row done, so it is never researched again. Use it only when the entity is clearly a private individual. A person who runs a public practice or business with published contacts, or any doubt, stays on the normal path (fill what the pages state, or all placeholders).
+
 ## 3. Write the JSON
 
 Write `OUT/eID.json` with the Write tool. Plain values, no HTML, no escaping, no placeholders: the orchestrator builds the row, escapes it and fills `<i>indisponível</i>` / `<i>desconhecido</i>` for anything you leave out. Do not include the Nome.
@@ -82,12 +87,13 @@ Write `OUT/eID.json` with the Write tool. Plain values, no HTML, no escaping, no
 - A value you did not find on a page: `null` (or leave the key out). Never guess.
 - `areas`: slugs from the list above only, no duplicates; `[]` if none fit.
 - `sources`: every page you took a value from, as full `http(s)` URLs; `[]` if you found nothing. They are shown on the site in a popup on the ✅ icon.
+- Private individual (🔒): write only `{"private": true}`. `apply_row.py` then writes a 🔒 row with every data cell a placeholder and no `data-src`; any other keys are ignored.
 - Fields still follow the formats in the table (URL starts with `http(s)://`, phone `+351 212 345 678` style).
 
 Do not open `index.html` in an editor; it has 6,000+ lines.
 
 ## 4. Report
 
-Final message, one line, always with the Nome as read in step 1: `eID | NOME | ok`, or `eID | NOME | FAILED: <reason>`. If step 1 found no row, use `—` for NOME.
+Final message, one line, always with the Nome as read in step 1: `eID | NOME | ok`, `eID | NOME | private` (you wrote `{"private": true}`), or `eID | NOME | FAILED: <reason>`. If step 1 found no row, use `—` for NOME.
 
 A run that hit a search error (section 2) writes no JSON, so the orchestrator records it as FAILED. Never write a JSON for a run you could not finish searching.

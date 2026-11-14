@@ -360,13 +360,18 @@ function listCell(r) { // ★ opens the list menu under it; inside a list the ro
   if (S.l) r.tl.append(btn('lst-rm', '✕', 'rm', `Tirar ${r.nome} da lista ${S.l}`));
   if (r.id === PICK) r.tl.append(listMenu(r));
   r.tn.replaceChildren();
-  if (!S.l) return;
-  const note = el('textarea', 'nota'), ind = el('span', 'guardado'); // multi-line; ind says whether the last edit was stored
-  note.rows = 2; note.maxLength = NOTE_MAX; note.placeholder = 'Nota…'; note.value = LST.get(S.l).get(r.id) ?? '';
-  note.dataset.r = r.id; note.setAttribute('aria-label', `Nota sobre ${r.nome}`);
-  ind.hidden = true; ind.setAttribute('role', 'status');
-  r.tn.append(note, ind);
+  for (const n of S.l ? [S.l] : mine) { // inside a list: that list's note; in Todas: one labelled note per list the entity is in
+    const w = el('div', 'nota-w'), note = el('textarea', 'nota'), ind = el('span', 'guardado'); // multi-line; ind says whether the last edit was stored
+    note.rows = 2; note.maxLength = NOTE_MAX; note.placeholder = 'Nota…'; note.value = LST.get(n).get(r.id) ?? '';
+    note.dataset.r = r.id; note.dataset.l = n; note.setAttribute('aria-label', `Nota sobre ${r.nome} na lista ${n}`);
+    ind.hidden = true; ind.setAttribute('role', 'status');
+    w.append(note, ind);
+    if (!S.l) r.tn.append(el('div', 'nota-l', n));
+    r.tn.append(w);
+  }
 }
+
+const dropOk = (n, id) => !LST.get(n).get(id) || confirm(`Tirar esta entidade de «${n}» apaga a nota que escreveste lá. Continuar?`); // never lose a note silently
 
 function listMenu(r) { // the small list under ★: one checkbox per list, plus a field to create one
   const menu = el('div', 'lst-menu'), nova = el('div', 'nova'), inp = el('input'), add = el('button', '', 'Criar');
@@ -409,7 +414,7 @@ const ACT = { // every [data-act] button
     if (!LST.get(k).has(PICK)) LST.get(k).set(PICK, '');
     saveLists(); update(); $('.lst-menu input[type=text]').focus();
   },
-  rm: b => { LST.get(S.l).delete(b.dataset.r); saveLists(); update(); },
+  rm: b => { if (dropOk(S.l, b.dataset.r)) { LST.get(S.l).delete(b.dataset.r); saveLists(); update(); } },
   emails: b => copy(b, emails().join('; ')),
   link: b => copy(b, location.href.replace(/#.*/, '') + '#' + new URLSearchParams({ share: S.l + ':' + members().map(r => r.id.slice(1)) }).toString().replace(/%2C/g, ',')),
   csv: () => {
@@ -445,7 +450,9 @@ document.addEventListener('keydown', e => {
 tbody.addEventListener('change', e => { // checkbox in the list menu
   const m = LST.get(e.target.dataset.n);
   if (!m) return;
-  if (e.target.checked) m.set(PICK, m.get(PICK) ?? ''); else m.delete(PICK);
+  if (e.target.checked) m.set(PICK, m.get(PICK) ?? '');
+  else if (dropOk(e.target.dataset.n, PICK)) m.delete(PICK);
+  else { e.target.checked = true; return; } // kept: they chose not to lose the note
   saveLists(); update();
   [...document.querySelectorAll('.lst-menu input[type=checkbox]')].find(c => c.dataset.n === e.target.dataset.n)?.focus(); // keep keyboard focus on the same checkbox
 });
@@ -454,7 +461,7 @@ tbody.addEventListener('keydown', e => { // Enter in the new-list field
 });
 tbody.addEventListener('input', e => { // note inside a list: saved as you type. ✓ = stored (fades), ⚠ = the browser refused (stays)
   if (!e.target.classList.contains('nota')) return;
-  LST.get(S.l).set(e.target.dataset.r, e.target.value.slice(0, NOTE_MAX));
+  LST.get(e.target.dataset.l).set(e.target.dataset.r, e.target.value.slice(0, NOTE_MAX));
   const ok = saveLists(), ind = e.target.nextElementSibling;
   ind.hidden = false; ind.classList.toggle('bad', !ok);
   ind.replaceChildren(ok ? '✓' : '⚠', el('span', 'vh', ok ? ' Guardado' : ' Não guardado: o navegador bloqueou o armazenamento'));

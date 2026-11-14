@@ -597,9 +597,9 @@ def test_page():
         assert trace == ["#p=2", "#ord=nome", "#ord=nome&dir=desc", "#nome=entidade+01&ord=nome&dir=desc",
                          "#nome=entidade+01&a=clinica&ord=nome&dir=desc", ""], trace
 
-        def lists(body, h="", seed=LISTS_SEED):
+        def lists(body, h="", seed=LISTS_SEED, wait=1500):
             script = LISTS_JS.replace("%SEED%", seed).replace("%BODY%", body)
-            dom = Page(chrome, tmp, _gen_rows(), script).dump(h, wait=1500)
+            dom = Page(chrome, tmp, _gen_rows(), script).dump(h, wait=wait)
             return dom, json.loads(html.unescape(re.search(r'data-out="([^"]*)"', dom).group(1)))
         stored = lambda out: json.loads(out["stored"])
         FAV = ["Favoritas", [["e0002", "ligar"], ["e0004", ""], ["e0005", ""]]]
@@ -645,19 +645,35 @@ def test_page():
         assert out["ids"] == ["e0004", "e0005"]
         assert stored(out) == [["Favoritas", [["e0004", "novo"], ["e0005", ""]]], ["Vazia", []]]
 
+        dom, out = lists("""const n = $('.nota'), ind = () => $('.guardado'), sleep = ms => new Promise(r => setTimeout(r, ms));
+  out.tag = n.tagName; out.hidden0 = ind().hidden;
+  n.value = 'linha 1\\nlinha 2'; n.dispatchEvent(new Event('input', {bubbles: true}));
+  out.ok = ind().textContent; out.shown = !ind().hidden; out.bad1 = ind().classList.contains('bad');
+  out.clear = n.getBoundingClientRect().right <= $('#rows tr td:nth-child(9)').getBoundingClientRect().left;
+  await sleep(1700); out.faded = ind().hidden;
+  Storage.prototype.setItem = () => { throw new Error('full'); };  // from here the browser refuses to store
+  n.value = 'perdida'; n.dispatchEvent(new Event('input', {bubbles: true}));
+  out.fail = ind().textContent; out.bad2 = ind().classList.contains('bad');
+  await sleep(1700); out.stays = !ind().hidden;""", "l=Favoritas", wait=6000)
+        assert out["tag"] == "TEXTAREA" and out["hidden0"] and out["ok"].startswith("✓") and out["shown"] and not out["bad1"]
+        assert out["faded"], "the ✓ fades"
+        assert out["clear"], "the note must end before the contact column"
+        assert stored(out)[0][1][0] == ["e0002", "linha 1\nlinha 2"]  # newline kept; the refused write never reached storage
+        assert out["fail"].startswith("⚠") and out["bad2"] and out["stays"], "a failed save is flagged and stays visible"
+
         dom, out = lists("window.prompt = () => ' Teste '; $('[data-act=new]').click();")
         assert out["hash"] == "#l=Teste" and stored(out) == [FAV, ["Vazia", []], ["Teste", []]]
         dom, out = lists("$('[data-act=del]').click();", "l=Favoritas")
         assert out["hash"] == "" and stored(out) == [["Vazia", []]]
 
-        dom, out = lists("""const n = $('.nota'); n.value = '=1+1'; n.dispatchEvent(new Event('input', {bubbles: true}));
+        dom, out = lists("""const n = $('.nota'); n.value = '=1+1\\nsegunda'; n.dispatchEvent(new Event('input', {bubbles: true}));
   $('[data-act=emails]').click(); out.mails = out.copied;
   $('[data-act=csv]').click(); out.csv = out.blob; out.csvFile = out.file;
   $('[data-act=link]').click(); out.link = out.copied;""", "l=Favoritas")
         assert out["mails"] == "a@x.example" and out["csvFile"] == "favoritas.csv"
         rows = out["csv"].split("\r\n")
-        assert rows[0] == '﻿"Nº";"Nome";"Local";"Distrito";"Morada";"E-mail";"Telefone";"Website";"Seguimento";"Nota"'
-        assert rows[1] == '"2";"Entidade 002";"Amarante";"Porto";"Rua X 1";"a@x.example";"210 000 000";"https://x.example";"Por ver";"\'=1+1"'
+        assert rows[0] == '\ufeff"Nº";"Nome";"Local";"Distrito";"Morada";"E-mail";"Telefone";"Website";"Seguimento";"Nota"'
+        assert rows[1] == '"2";"Entidade 002";"Amarante";"Porto";"Rua X 1";"a@x.example";"210 000 000";"https://x.example";"Por ver";"\'=1+1\nsegunda"'
         assert rows[3] == '"5";"Entidade 005";"";"";"";"";"";"";"Por ver";""' and len(rows) == 4
         assert out["link"].endswith("#share=Favoritas%3A0002,0004,0005")
 

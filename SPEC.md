@@ -24,7 +24,7 @@ Repo contents (small on purpose): `index.html`, its CSS and JS files, `README.md
 
 | # | Column | Type | Notes |
 |---|--------|------|-------|
-| 1 | Status | emoji | `⬜` NOT-FILLED, `✅` FILLED |
+| 1 | Status | emoji | `⬜` NOT-FILLED, `✅` FILLED, `🔒` PRIVATE INDIVIDUAL |
 | 2 | Nº | int | OPP protocol number; also the row id |
 | 3 | Nome | text | From OPP; never edited by subagents |
 | 4 | Local | text | One name from `lookup/<Distrito>.txt` (município; for Lisboa also its freguesias). See 4.2 |
@@ -65,6 +65,7 @@ A field the subagent could not find is written as `<i>indisponível</i>`, never 
 - `⬜` = nobody has researched this entity.
 - `✅` = a subagent researched it, and every field holds either a value or `<i>indisponível</i>` (Áreas: at least one slug or `<i>desconhecido</i>`; Distrito: a value or `<i>desconhecido</i>`).
 - A ✅ row with all fields indisponível is valid ("searched, found nothing").
+- `🔒` = the entity is clearly a private individual (a natural person, not a company, association or public body) with no public business data, so its data is deliberately not published. It counts as done: tooling never re-queries it. A 🔒 row has no `data-src`, the same Nº and Nome rules as any row, and every data cell is `<i>indisponível</i>` or `<i>desconhecido</i>` (as in an empty ✅ row). It is written by `scripts/apply_row.py` from a research JSON with `"private": true`, only when the entity is clearly a person. The page shows 🔒 as its own status ("Pessoa singular: dados não publicados"), neither pending nor filled.
 
 ## 5. File format (the contract between orchestrator and subagents)
 
@@ -86,7 +87,7 @@ Rules:
 - Text is HTML-escaped (`&amp;`, `&lt;`). Emails and URLs stored as plain text; JS makes them links at render time. Telefone becomes `<a href="tel:+351212345678">212 345 678</a>`: the `href` is the stored number without spaces, the label drops a leading `+351 ` (non-Portuguese numbers show in full).
 - Ids are the protocol number zero-padded to **at least** 4 digits (`e0001`, `e9999`, `e10000`); never truncated. Row regex uses `e[0-9]{4,}`.
 - Áreas cell: space-separated slugs (not `;`). The UI turns them into chips and a multi-select filter, so the raw token form is never what the user sees **[CALL]**. Chosen because it is the cheapest form to edit and to match with `grep -w`.
-- Sources: a ✅ row carries `data-src="URL URL…"` on the `<tr>` (space-separated http(s) URLs, `&` escaped), written by `scripts/apply_row.py` from the research JSON's `sources`. ⬜ rows never have it. The page shows it as a popup on the ✅ icon.
+- Sources: a ✅ row carries `data-src="URL URL…"` on the `<tr>` (space-separated http(s) URLs, `&` escaped), written by `scripts/apply_row.py` from the research JSON's `sources`. ⬜ and 🔒 rows never have it. The page shows it as a popup on the ✅ icon.
 - Subagent read: `grep '^<tr id="e0001"[ >]' index.html`.
 - Subagent write: replace that one line; touch no other line.
 - Orchestrator: `grep -m1 '^<tr id="e[0-9]*"><td>⬜' index.html` (next work), `grep -c '^<tr id="e[0-9]*"><td>⬜' index.html` (remaining). Rows flagged `data-removed="1"` have an attribute after the id, so these patterns skip them.
@@ -97,7 +98,7 @@ Rules:
 All 11 columns shown. **Sortable columns: Estado, Nº, Nome, Local, Distrito, Áreas only**; the others (Morada, Adicional, Website, E-mail, Telefone) are not sortable. Header click sorts (asc/desc, toggling), numeric sort for Nº, locale-aware sort (pt) for text, first área label for Áreas. `indisponível`, `desconhecido` and empty cells sort last in both directions.
 
 ### 6.2 Filters
-- Status: All / ✅ / ⬜ (default: **All**).
+- Status: All / ✅ / ⬜ / 🔒 (default: **All**).
 - Filters exist **only** on Nome, Local, Áreas (plus Distrito, see below). All other columns are neither sortable nor filterable.
 - Nome: text "contains" box, accent- and case-insensitive.
 - Local: exact-match dropdown of the locais present.
@@ -116,7 +117,7 @@ v1: "near" means same city or same district. Distrito is best effort (often `<i>
 A visible note: the list is from OPP, informational, and does not imply a vacancy; data is gathered automatically and may be wrong; link to the OPP source page and to the entity's own site.
 
 ### 6.6 Accessibility
-Real `<table>` with `<th scope="col">`, keyboard-operable sort, labels on all filter inputs, status conveyed by emoji **and** an accessible text (`title`/`aria-label`: "Preenchido" / "Por preencher").
+Real `<table>` with `<th scope="col">`, keyboard-operable sort, labels on all filter inputs, status conveyed by emoji **and** an accessible text (`title`/`aria-label`: "Preenchido" / "Por preencher" / "Pessoa singular: dados não publicados").
 
 ### 6.7 Custom lists
 Visitors can group entities into named lists (e.g. "Candidaturas"). Lists are personal and live only in the browser (`localStorage` key `iq-lists`: a JSON array of `[name, [[entityId, note], ...]]`); there is no backend.
@@ -149,6 +150,7 @@ A small script that fails the PR if:
 - any line of `index.html` other than an entity row changed, or an entity row changed other than by filling it (one PR may fill several entities, one commit each);
 - the line does not match the section 5 shape (11 cells, valid status, valid áreas slugs, or exactly `<i>desconhecido</i>` alone);
 - a ✅ row contains an empty cell;
+- a 🔒 row has `data-src`, or a data cell that is not `<i>indisponível</i>` / `<i>desconhecido</i>`;
 - a URL does not start with `http://` or `https://`, an e-mail is not shaped like one, or a phone does not match `+<country code> <digits>`.
 
 ### 7.5 Syncing new entities from OPP **[CALL]**

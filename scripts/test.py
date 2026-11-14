@@ -85,6 +85,34 @@ def test_check_row_rejects():
         assert check.check_row(line), name
 
 
+PRIV_CELLS = ["🔒", "0001", "Fulano de Tal"] + [IND, DESC, IND, DESC, IND, IND, IND, IND]
+
+
+def test_check_private():
+    assert check.check_row(row(PRIV_CELLS)) == []
+    assert check.check_row(row(PRIV_CELLS[:3] + [DESC] * 8)) == []
+    assert check.check_row(row(PRIV_CELLS, attr=' data-removed="1"')) == []
+    for name, line in {
+        "filled field": row(PRIV_CELLS[:3] + ["Cascais"] + PRIV_CELLS[4:]),
+        "empty field": row(PRIV_CELLS[:10] + [""]),
+        "data-src": row(PRIV_CELLS, attr=' data-src="https://a.pt/x"'),
+        "Nº mismatch": row(PRIV_CELLS[:1] + ["0002"] + PRIV_CELLS[2:]),
+        "empty Nome": row(PRIV_CELLS[:2] + [""] + PRIV_CELLS[3:]),
+    }.items():
+        assert check.check_row(line), name
+    # filling a pending row as private passes the diff check; changing Nome does not
+    assert check.check_diff(diff((EMPTY, row(["🔒", "0001", "Centro Doutor João dos Santos - Casa da Praia (IPSS)"] + PRIV_CELLS[3:]))), ["index.html"], None) == []
+    assert check.check_diff(diff((EMPTY, row(PRIV_CELLS))), ["index.html"], None)
+
+
+def test_apply_row_private():
+    new = apply_row.build(EMPTY, {"private": True, "morada": "ignored", "sources": ["https://a.pt"]})
+    assert new == row(["🔒", "0001", "Centro Doutor João dos Santos - Casa da Praia (IPSS)"] + PRIV_CELLS[3:]), new
+    assert "data-src" not in new and check.check_row(new) == []
+    flagged = apply_row.build(row(["⬜", "0001", "N"] + [""] * 8, attr=' data-removed="1"'), {"private": True})
+    assert ' data-removed="1"' in flagged and check.check_row(flagged) == []
+
+
 def test_check_data_src():
     ok = row(FILLED_CELLS, attr=' data-src="https://a.pt/x https://b.pt/y?a=1&amp;b=2"')
     assert check.check_row(ok) == []

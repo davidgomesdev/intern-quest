@@ -126,6 +126,9 @@ Visitors can group entities into named lists (e.g. "Candidaturas"). Lists are pe
 - A share link carries only entity ids: `#share=<name>:<id>,<id>` (4+ digit protocol numbers). Opening one shows a banner with Guardar/Ignorar; nothing is stored until the visitor accepts. Notes are not shared.
 - Backup: export all lists as JSON and import such a file (merged into existing lists). Imports and links are validated: unknown ids and blank names are dropped, names and notes are length-capped.
 
+### 6.8 Buttons
+Every action button (Limpar filtros, pager, list actions, backup, progress export/import/copy link) uses the one shared pill style in `app.css` (the `button.limpar, .pager button, …` rule). New buttons are added to that selector, not styled separately. Only the flat icon buttons next to the Nº (🚩 ☆ ✕) and the sort buttons in the table header are exempt. To open a file picker, use a styled `<button>` that clicks a hidden `<input type="file">`, never a `<label>`.
+
 ## 7. Workflow
 
 ### 7.1 Orchestrator (a Claude session, not part of the site)

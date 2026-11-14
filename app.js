@@ -314,6 +314,7 @@ $('#exp').onclick = () => {
   a.href = URL.createObjectURL(new Blob([JSON.stringify(SAVED)], { type: 'application/json' }));
   a.click(); URL.revokeObjectURL(a.href);
 };
+$('#impb').onclick = () => $('#imp').click();
 $('#imp').onchange = async e => {
   try { alert(`${mergeSaved(JSON.parse(await e.target.files[0].text()))} estados importados.`); } catch { alert('Ficheiro inválido.'); }
   e.target.value = ''; update();

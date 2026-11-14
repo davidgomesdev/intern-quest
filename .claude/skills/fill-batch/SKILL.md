@@ -86,17 +86,17 @@ gh pr create --title "feat(data): fill N entities" --body-file "$OUT/body.md"
 Body: `OUT/body.md`, as written by step 4 (`--body-file "$OUT/body.md"`). One line per dispatched entity, nothing else: no research notes, no skipped ids (those only go in the final report).
  GitHub calls can time out: retry a failed `push` or `gh` up to 3 times, waiting 10, 30, 60 seconds. If it still fails, stop and report the exact error; the worktree and branch stay for a human.
 
-## 6. Wait for CI, merge
+## 6. Queue the merge
 
-This skill overrides the global "never merge" rule: merge only after CI succeeds with no warnings or alerts.
+This skill overrides the global "never merge" rule: GitHub merges only after the required CI check passes.
 
 ```bash
 scripts/ci_merge.sh
 ```
 
-It waits for checks, requires every check run to be `success` with no non-notice annotations and no PR comments/reviews, then `gh pr merge --rebase`. It prints one verdict line: `merged <URL>`, `CI failed <URL>`, `no CI checks <URL>`, `alert, not merged <URL>: <first alert>` or `merge refused: <reason>`. Never retry or bypass a refusal.
+It turns on auto-merge (`gh pr merge --auto --rebase`) and returns at once; it does not wait for CI. It prints one verdict line: `auto-merge queued <URL>` or `merge refused: <reason>`. Never retry or bypass a refusal. A CI failure leaves the PR open for a human.
 
-Then clean up: `cd "$(git rev-parse --git-common-dir)/.." && git worktree remove ../intern-quest-wt-fill-<stamp>` (skip it when the PR was not merged, so a human can look).
+Then clean up: `cd "$(git rev-parse --git-common-dir)/.." && git worktree remove ../intern-quest-wt-fill-<stamp>` (skip it when the merge was refused, so a human can look).
 
 ## 7. Report
 
@@ -105,14 +105,14 @@ One table, then the counts. Rows come from `OUT/report.tsv`; a committed entity'
 ```
 | id    | nome                          | result                                  |
 |-------|-------------------------------|-----------------------------------------|
-| e0001 | Centro Doutor João dos Santos | merged https://github.com/…/pull/12     |
+| e0001 | Centro Doutor João dos Santos | auto-merge queued https://github.com/…/pull/12 |
 | e0002 | Clínica Exemplo, Lda.         | FAILED: check.py: Telefone invalid      |
 | e0003 | Escola Exemplo                | skipped: already ✅                     |
 | e0009 | —                             | skipped: no row                         |
 ```
 
-Nome is in `report.tsv` (copied exactly from the row); ids dropped in step 2 use `—` when they have no row, else the third `<td>`. If the PR did not merge (alert, CI failed, refused), every committed id shows `not merged <reason> <PR URL>`.
+Nome is in `report.tsv` (copied exactly from the row); ids dropped in step 2 use `—` when they have no row, else the third `<td>`. If the merge was refused, every committed id shows `not merged <reason> <PR URL>`.
 
-Then: `Remaining ⬜: ` + output of `grep -c '^<tr id="e[0-9]*"><td>⬜' index.html` run on the updated `main` checkout.
+Then: `Remaining ⬜: ` + output of `grep -c '^<tr id="e[0-9]*"><td>⬜' index.html` run on the updated `main` checkout (queued PRs are not merged yet, so they still count).
 
 Do not retry failures automatically.

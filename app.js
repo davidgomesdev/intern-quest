@@ -19,7 +19,9 @@ try { REMIND = localStorage.getItem('iq-remind') !== '0'; } catch { /* no storag
 const LIST_MAX = 40, NOTE_MAX = 500;
 let LST = new Map(), SHARE = null, PICK = ''; // SHARE: a list received in a link, waiting to be saved; PICK: entity whose list menu is open
 const ser = () => [...LST].map(([n, m]) => [n, [...m]]); // the storage / backup-file shape
-function saveLists() { try { localStorage.setItem('iq-lists', JSON.stringify(ser())); } catch { /* storage full or blocked */ } }
+function saveLists() { // true if the browser kept it; false when storage is full or blocked
+  try { localStorage.setItem('iq-lists', JSON.stringify(ser())); return true; } catch { return false; }
+}
 function mergeLists(data) { // data has the ser() shape; throws if it does not
   for (const [name, items] of data) {
     const k = String(name).trim().slice(0, LIST_MAX);
@@ -359,10 +361,11 @@ function listCell(r) { // ★ opens the list menu under it; inside a list the ro
   if (r.id === PICK) r.tl.append(listMenu(r));
   r.tn.replaceChildren();
   if (!S.l) return;
-  const note = el('input', 'nota');
-  note.type = 'text'; note.maxLength = NOTE_MAX; note.placeholder = 'Nota…'; note.value = LST.get(S.l).get(r.id) ?? '';
+  const note = el('textarea', 'nota'), ind = el('span', 'guardado'); // multi-line; ind says whether the last edit was stored
+  note.rows = 2; note.maxLength = NOTE_MAX; note.placeholder = 'Nota…'; note.value = LST.get(S.l).get(r.id) ?? '';
   note.dataset.r = r.id; note.setAttribute('aria-label', `Nota sobre ${r.nome}`);
-  r.tn.append(note);
+  ind.hidden = true; ind.setAttribute('role', 'status');
+  r.tn.append(note, ind);
 }
 
 function listMenu(r) { // the small list under ★: one checkbox per list, plus a field to create one
@@ -449,8 +452,15 @@ tbody.addEventListener('change', e => { // checkbox in the list menu
 tbody.addEventListener('keydown', e => { // Enter in the new-list field
   if (e.key === 'Enter' && e.target.matches('.lst-menu input[type=text]')) { e.preventDefault(); ACT.padd(e.target); }
 });
-tbody.addEventListener('input', e => { // note inside a list: saved as you type
-  if (e.target.classList.contains('nota')) { LST.get(S.l).set(e.target.dataset.r, e.target.value.slice(0, NOTE_MAX)); saveLists(); }
+tbody.addEventListener('input', e => { // note inside a list: saved as you type. ✓ = stored (fades), ⚠ = the browser refused (stays)
+  if (!e.target.classList.contains('nota')) return;
+  LST.get(S.l).set(e.target.dataset.r, e.target.value.slice(0, NOTE_MAX));
+  const ok = saveLists(), ind = e.target.nextElementSibling;
+  ind.hidden = false; ind.classList.toggle('bad', !ok);
+  ind.replaceChildren(ok ? '✓' : '⚠', el('span', 'vh', ok ? ' Guardado' : ' Não guardado: o navegador bloqueou o armazenamento'));
+  ind.title = ok ? 'Guardado' : 'Não guardado: o navegador bloqueou o armazenamento';
+  clearTimeout(ind.t);
+  if (ok) ind.t = setTimeout(() => { ind.hidden = true; }, 1500);
 });
 $('#imp-f').addEventListener('change', async e => {
   const f = e.target.files[0];

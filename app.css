@@ -205,7 +205,7 @@ footer { padding: var(--s4) 0 var(--s6); font-size: 13px; color: var(--muted); }
 }
 
 @media print {
-  #painel, .barra, .pager-fim, thead, #listas, #lista-acoes, #backup, td:nth-child(13) { display: none; }
+  #painel, .barra, .pager-fim, thead, #listas, #lista-acoes, #backup, .lst { display: none; }
   tbody tr { break-inside: avoid; }
 }
 
@@ -260,7 +260,8 @@ input[name=st] + span::before { content: ""; display: inline-block; width: .6em;
   td:nth-child(12) { flex: 1 1 100%; padding: 6px 0 0; }
   .pilula { min-height: 40px; font-size: 15px; }
 }
-.rep { font: inherit; padding: 0 2px; border: 0; background: none; cursor: pointer; filter: grayscale(.6); }
+.rep, .lst-btn, .lst-rm { font: inherit; padding: 0 2px; border: 0; background: none; cursor: pointer; } /* flat icon buttons next to the entity number */
+.rep { filter: grayscale(.6); }
 .rep:hover, .rep:focus-visible { filter: none; }
 
 /* ---------- Custom lists ---------- */
@@ -282,26 +283,21 @@ input[name=st] + span::before { content: ""; display: inline-block; width: .6em;
 #backup summary { cursor: pointer; }
 #backup button { margin-right: var(--s2); }
 
-/* ★ / ✕ sit in the card's top-right corner; the note gets its own row at the bottom */
-tbody tr { position: relative; }
-tbody tr td:nth-child(2) { padding-right: 2.6rem; }
-tbody tr:has(.lst-rm) td:nth-child(2) { padding-right: 5.4rem; }
-td:nth-child(13) { position: absolute; top: 6px; right: 8px; display: flex; gap: 4px; }
-.lst-btn, .lst-rm {
-  min-width: 30px; min-height: 30px; padding: 0 6px; font: 16px/1 var(--sans); color: var(--muted); cursor: pointer;
-  background: var(--card); border: 1px solid var(--line); border-radius: var(--r-pill);
-}
-.lst-btn.on { color: var(--accent); border-color: var(--accent); background: var(--soft); }
-.lst-rm:hover:not(:disabled) { color: var(--bad); border-color: var(--bad); background: var(--card); }
-td:nth-child(14) { grid-column: 2 / 5; grid-row: 6; padding-top: 4px; }
+/* ★ / ✕ sit in the Nº cell right after the 🚩 and share its flat look; the note gets its own row at the bottom */
+.lst { position: relative; display: inline-block; white-space: nowrap; }
+.lst-btn, .lst-rm { color: var(--muted); }
+.lst-btn:hover, .lst-btn.on { color: var(--accent); }
+.lst-rm { margin-left: 4px; }
+.lst-rm:hover, .lst-rm:focus-visible { color: var(--bad); }
+td:nth-child(13) { grid-column: 2 / 5; grid-row: 6; padding-top: 4px; }
 .nota {
   width: 100%; font: 14px/1.3 var(--sans); color: var(--fg); background: var(--card);
   border: 1px solid var(--edge); border-radius: var(--r-field); padding: 6px 10px;
 }
 
-/* list menu: a small dropdown hanging under the ★ (td:nth-child(13) is its positioned parent) */
+/* list menu: a small dropdown hanging under the ★ (.lst is its positioned parent) */
 .lst-menu {
-  position: absolute; z-index: 4; top: calc(100% + 4px); right: 0; width: min(240px, calc(100vw - 48px)); max-height: 60vh; overflow-y: auto;
+  position: absolute; z-index: 4; top: calc(100% + 4px); right: 0; text-align: left; white-space: normal; color: var(--fg); width: min(240px, calc(100vw - 48px)); max-height: 60vh; overflow-y: auto;
   display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; padding: var(--s2); background: var(--card); border: 1px solid var(--edge); border-radius: var(--r-field);
   box-shadow: 0 4px 16px rgb(0 0 0 / 0.18); font-size: 14px; line-height: 1.4; font-weight: 400;
 }
@@ -323,10 +319,6 @@ td:nth-child(14) { grid-column: 2 / 5; grid-row: 6; padding-top: 4px; }
 .lst-menu .nova button { padding: 4px 12px; min-height: 32px; }
 
 @media (max-width: 719px) {
-  .lst-btn, .lst-rm { min-width: 36px; min-height: 36px; }
-  td:nth-child(13) { top: 4px; }
-  tbody tr td:nth-child(2) { padding-right: 3rem; }
-  tbody tr:has(.lst-rm) td:nth-child(2) { padding-right: 6.4rem; }
   .lst-menu .toggle { padding: 10px 6px; }
   .lst-menu .nova input { font-size: 16px; min-height: 40px; }
   .lst-menu .nova button { min-height: 40px; }

@@ -195,8 +195,8 @@ function enhance(r) {
   rep.onclick = () => { location.href = mail; };
   c[1].append(' ', rep);
   td.setAttribute('role', 'cell'); td.append(sel); r.el.append(td);
-  r.tl = el('td'); r.tn = el('td'); // lists: ★ button (+ ✕ inside a list); note (inside a list). Filled by listCell()
-  r.tl.setAttribute('role', 'cell'); r.tn.setAttribute('role', 'cell'); r.el.append(r.tl, r.tn);
+  r.tl = el('span', 'lst'); c[1].append(' ', r.tl); // lists: ★ (+ ✕ inside a list) right after the 🚩, same flat style. Filled by listCell()
+  r.tn = el('td'); r.tn.setAttribute('role', 'cell'); r.el.append(r.tn); // the note, inside a list
   r.done = true;
 }
 
@@ -355,10 +355,10 @@ function listCell(r) { // ★ opens the list menu under it; inside a list the ro
     mine.length ? `Listas de ${r.nome}: ${mine.join(', ')}` : `Juntar ${r.nome} a uma lista`);
   star.setAttribute('aria-expanded', r.id === PICK);
   r.tl.replaceChildren(star);
+  if (S.l) r.tl.append(btn('lst-rm', '✕', 'rm', `Tirar ${r.nome} da lista ${S.l}`));
   if (r.id === PICK) r.tl.append(listMenu(r));
   r.tn.replaceChildren();
   if (!S.l) return;
-  r.tl.prepend(btn('lst-rm', '✕', 'rm', `Tirar ${r.nome} da lista ${S.l}`));
   const note = el('input', 'nota');
   note.type = 'text'; note.maxLength = NOTE_MAX; note.placeholder = 'Nota…'; note.value = LST.get(S.l).get(r.id) ?? '';
   note.dataset.r = r.id; note.setAttribute('aria-label', `Nota sobre ${r.nome}`);

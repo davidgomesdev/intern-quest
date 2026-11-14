@@ -617,13 +617,14 @@ def test_page():
 
         dom, out = lists("""const boxes = () => $$('.lst-menu input[type=checkbox]').map(c => [c.dataset.n, c.checked]);
   $('#rows [data-act=pick]').click();  // the list menu opens right under this card's ★
-  out.menus = $$('.lst-menu').length; out.under = $('.lst-menu').parentElement.parentElement.id; out.label = $('.lst-menu').getAttribute('aria-label');
+  out.menus = $$('.lst-menu').length; out.under = $('.lst-menu').closest('tr').id; out.cell = $('#rows [data-act=pick]').closest('td') === $('#rows .rep').closest('td') && $('.lst-menu').closest('td') === $('.rep').closest('td') && !!$('.rep').closest('td:nth-child(2)'); out.label = $('.lst-menu').getAttribute('aria-label');
   out.expanded = $('#rows [data-act=pick]').getAttribute('aria-expanded'); out.cbs = boxes();
   const c = $$('.lst-menu input[type=checkbox]')[1]; c.checked = true; c.dispatchEvent(new Event('change', {bubbles: true}));
   out.stays = $$('.lst-menu').length;  // ticking a box keeps the menu open
   $('.lst-menu input[type=text]').value = ' Nova '; $('.lst-menu [data-act=padd]').click();
   out.cbs2 = boxes(); out.star = $('#rows [data-act=pick]').textContent;""")
         assert out["menus"] == 1 and out["under"] == "e0002" and out["label"] == "Listas de Entidade 002" and out["expanded"] == "true"
+        assert out["cell"]  # ★ and the report 🚩 share the Nº cell, and the menu hangs from it
         assert out["cbs"] == [["Favoritas", True], ["Vazia", False]] and out["stays"] == 1
         assert out["cbs2"] == [["Favoritas", True], ["Vazia", True], ["Nova", True]] and out["star"] == "★"
         assert stored(out) == [FAV, ["Vazia", [["e0002", ""]]], ["Nova", [["e0002", ""]]]]

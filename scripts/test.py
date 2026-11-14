@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Plain test runner: runs every test_* function below, exits 1 on first failure."""
-import html, json, os, re, shutil, subprocess, sys, tempfile, traceback, unicodedata
+import concurrent.futures, contextlib, html, json, os, re, shutil, subprocess, sys, tempfile, threading, traceback, unicodedata
 
 sys.dont_write_bytecode = True
 from importlib.machinery import SourceFileLoader
@@ -392,6 +392,17 @@ addEventListener('load', async () => {
 });</script>"""
 
 
+# Every check starts a fresh headless Chrome, and a start costs seconds (several on a machine that scans every
+# process and file, e.g. endpoint security), so launches run side by side. Past ~4 at once nothing gets faster.
+_CHROME_SLOTS = threading.BoundedSemaphore(int(os.environ.get("CHROME_JOBS", "4")))
+
+
+def _pmap(fn, items):
+    """fn over items, concurrently (Page.dump caps how many Chromes really run), results in order."""
+    with concurrent.futures.ThreadPoolExecutor(8) as ex:
+        return list(ex.map(fn, items))
+
+
 class Page:
     """Headless-Chrome harness: index.html with its rows replaced by `fixture`."""
 
@@ -414,9 +425,11 @@ class Page:
             f.write("\n".join(lines))
 
     def dump(self, h="", allow_err=False, wait=0):
-        r = subprocess.run([self.chrome, "--headless", "--disable-gpu", "--no-sandbox", "--dump-dom", f"--virtual-time-budget={wait}" if wait else "--no-first-run",
-                            f"--user-data-dir={self.tmp}/profile", f"file://{self.path}#{h}"],
-                           capture_output=True, text=True, timeout=60)
+        profile = tempfile.mkdtemp(dir=self.tmp)  # one per launch, so launches can overlap
+        with _CHROME_SLOTS:
+            r = subprocess.run([self.chrome, "--headless", "--disable-gpu", "--no-sandbox", "--dump-dom", f"--virtual-time-budget={wait}" if wait else "--no-first-run",
+                                f"--user-data-dir={profile}", f"file://{self.path}#{h}"],
+                               capture_output=True, text=True, timeout=120)
         assert r.returncode == 0, r.stderr
         assert allow_err or "data-err" not in r.stdout, (h, "page error")
         return r.stdout
@@ -464,20 +477,45 @@ def test_lookup_embedded():
         assert embed.line() in f.read().split("\n"), "index.html lookup is stale: run scripts/embed_lookup.py"
 
 
-def test_page():
+@contextlib.contextmanager
+def _page_env():
+    """(chrome, fixture rows, scratch dir) for one part of the page tests; None when there is no Chrome to run."""
     chrome = _chrome()
     if not chrome:
         assert not os.environ.get("REQUIRE_CHROME"), "REQUIRE_CHROME is set but no Chrome binary was found"
-        print("     (test_page skipped: no Chrome found, set $CHROME)")
+        print("     (page tests skipped: no Chrome found, set $CHROME)")
+        yield None
         return
-    root = os.path.dirname(HERE)
     with open(os.path.join(FIX, "rows.txt"), encoding="utf-8") as f:
         fixture = f.read().rstrip("\n").split("\n")
     with tempfile.TemporaryDirectory() as tmp:
+        yield chrome, fixture, tmp
+
+
+def _lists_runner(chrome, tmp):
+    def lists(body, h="", seed=LISTS_SEED, wait=1500):
+        script = LISTS_JS.replace("%SEED%", seed).replace("%BODY%", body)
+        dom = Page(chrome, tmp, _gen_rows(), script).dump(h, wait=wait)
+        return dom, json.loads(html.unescape(re.search(r'data-out="([^"]*)"', dom).group(1)))
+    return lists
+
+
+stored = lambda out: json.loads(out["stored"])
+FAV = ["Favoritas", [["e0002", "ligar"], ["e0004", ""], ["e0005", ""]]]
+view = ("out.tabs = $$('#listas .tab').map(b => b.textContent); out.notes = $$('.nota').map(i => i.value);"
+        "out.rm = $$('.lst-rm').length; out.mail = $('[data-act=emails]').textContent;")
+
+
+def _part_filters():
+    with _page_env() as env:
+        if not env:
+            return
+        chrome, fixture, tmp = env
+        root = os.path.dirname(HERE)
         small = Page(chrome, tmp, fixture).dump
         ALL = "estado=todos&vazias=1&"
         D3 = "3 de 5 entidades, 3 com dados"
-        for h, want, act in [
+        CASES = [
                 ("", D3, ""), ("a=clinica", "2 de 5 entidades, 2 com dados", "(1 ativo)"),
                 ("a=clinica,neuropsicologia", D3, "(2 ativos)"),
                 ("a=", D3, ""),
@@ -505,8 +543,8 @@ def test_page():
                 ("ord=constructor", D3, ""),
                 ("ord=toString", D3, ""),
                 ("a=constructor", D3, ""),
-                ("a=__proto__,toString", D3, "")]:
-            dom = small(h)
+                ("a=__proto__,toString", D3, "")]
+        for (h, want, act), dom in zip(CASES, _pmap(small, [c[0] for c in CASES])):
             assert _count(dom) == want, (h, _count(dom), want)
             assert _ativos(dom) == act, (h, _ativos(dom))
         for h in ["ord=__proto__", "ord=constructor", "a=constructor"]:
@@ -542,6 +580,17 @@ def test_page():
         assert "<i>indisponível</i>" in dom
         assert "Café" not in small(ALL)
 
+
+
+def _part_paging():
+    with _page_env() as env:
+        if not env:
+            return
+        chrome, fixture, tmp = env
+        root = os.path.dirname(HERE)
+        small = Page(chrome, tmp, fixture).dump
+        ALL = "estado=todos&vazias=1&"
+        D3 = "3 de 5 entidades, 3 com dados"
         _big = Page(chrome, tmp, _gen_rows()).dump
         big = lambda h="": _big(ALL + h)
         dom = big()
@@ -565,6 +614,17 @@ def test_page():
         assert _count(dom).startswith("10 de 120") and _pager(dom) == "Página 1 de 1"
         assert _count(big("c=Vila%20do%20Conde")).startswith("30 de 120")
         assert _count(big("d=Porto")).startswith("60 de 120")
+
+
+def _part_edge():
+    with _page_env() as env:
+        if not env:
+            return
+        chrome, fixture, tmp = env
+        root = os.path.dirname(HERE)
+        small = Page(chrome, tmp, fixture).dump
+        ALL = "estado=todos&vazias=1&"
+        D3 = "3 de 5 entidades, 3 com dados"
         clone = lambda i: fixture[0].replace('id="e0001"', f'id="e000{i}"').replace("<td>0001</td>", f"<td>000{i}</td>")
         orphan = clone(7).replace("<td>Lisboa</td>", DESC_TD, 1)  # Cascais with no Distrito (scrape failure)
         clash = clone(8).replace("<td>Lisboa</td>", "<td>Porto</td>", 1)  # Cascais with Distrito Porto
@@ -597,15 +657,15 @@ def test_page():
         assert trace == ["#p=2", "#ord=nome", "#ord=nome&dir=desc", "#nome=entidade+01&ord=nome&dir=desc",
                          "#nome=entidade+01&a=clinica&ord=nome&dir=desc", ""], trace
 
-        def lists(body, h="", seed=LISTS_SEED, wait=1500):
-            script = LISTS_JS.replace("%SEED%", seed).replace("%BODY%", body)
-            dom = Page(chrome, tmp, _gen_rows(), script).dump(h, wait=wait)
-            return dom, json.loads(html.unescape(re.search(r'data-out="([^"]*)"', dom).group(1)))
-        stored = lambda out: json.loads(out["stored"])
-        FAV = ["Favoritas", [["e0002", "ligar"], ["e0004", ""], ["e0005", ""]]]
 
-        view = ("out.tabs = $$('#listas .tab').map(b => b.textContent); out.notes = $$('.nota').map(i => i.value);"
-                "out.rm = $$('.lst-rm').length; out.mail = $('[data-act=emails]').textContent;")
+
+def _part_lists_a():
+    with _page_env() as env:
+        if not env:
+            return
+        chrome, fixture, tmp = env
+        root = os.path.dirname(HERE)
+        lists = _lists_runner(chrome, tmp)
         dom, out = lists(view, "l=Favoritas")  # a list shows all its members, even ⬜ ones that Estado would hide
         assert _ids(dom) == ["e0002", "e0004", "e0005"] and _count(dom) == "3 de 3 entidades, 2 com dados"
         assert out["tabs"] == ["Todas", "Favoritas3", "Vazia0", "+ Nova lista"] and out["notes"] == ["ligar", "", ""]
@@ -681,6 +741,15 @@ def test_page():
   $$('.lst-rm')[1].click(); out.after2 = $$('#rows tr').length;         // e0004 has none: removed without asking""", "l=Favoritas")
         assert out["asked"] == 1 and out["after1"] == 3 and out["after2"] == 2
 
+
+
+def _part_lists_b():
+    with _page_env() as env:
+        if not env:
+            return
+        chrome, fixture, tmp = env
+        root = os.path.dirname(HERE)
+        lists = _lists_runner(chrome, tmp)
         dom, out = lists("window.prompt = () => ' Teste '; $('[data-act=new]').click();")
         assert out["hash"] == "#l=Teste" and stored(out) == [FAV, ["Vazia", []], ["Teste", []]]
         dom, out = lists("$('[data-act=del]').click();", "l=Favoritas")
@@ -721,8 +790,18 @@ def test_page():
         assert out["tabs"] == ["Todas", "__proto__1", "ok1", "+ Nova lista"], out["tabs"]  # hostile names are plain names; bad ids and blank names dropped
 
 
+
+
+PAGE_PARTS = [_part_filters, _part_paging, _part_edge, _part_lists_a, _part_lists_b]  # independent: main() runs them side by side
+
+
+def test_page():
+    for part in PAGE_PARTS:
+        part()
+
+
 def main():
-    tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
+    tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f) and n != "test_page"]
     for name, fn in tests:
         try:
             fn()
@@ -731,7 +810,20 @@ def main():
             traceback.print_exc()
             sys.exit(1)
         print(f"ok   {name}")
-    print(f"{len(tests)} tests passed")
+    with concurrent.futures.ThreadPoolExecutor(len(PAGE_PARTS)) as ex:  # test_page: its parts run side by side
+        futs = {ex.submit(p): p.__name__ for p in PAGE_PARTS}
+        failed = []
+        for f in concurrent.futures.as_completed(futs):
+            try:
+                f.result()
+            except Exception:
+                failed.append(futs[f])
+                print(f"FAIL {futs[f]}")
+                traceback.print_exc()
+    if failed:
+        sys.exit(1)
+    print("ok   test_page")
+    print(f"{len(tests) + 1} tests passed")
 
 
 if __name__ == "__main__":

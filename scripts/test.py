@@ -661,6 +661,26 @@ def test_page():
         assert stored(out)[0][1][0] == ["e0002", "linha 1\nlinha 2"]  # newline kept; the refused write never reached storage
         assert out["fail"].startswith("⚠") and out["bad2"] and out["stays"], "a failed save is flagged and stays visible"
 
+        dom, out = lists("""const notes = () => $$('.nota').map(n => [n.dataset.l, n.dataset.r, n.value]);
+  const box = i => $$('.lst-menu input[type=checkbox]')[i], setBox = (i, on) => { box(i).checked = on; box(i).dispatchEvent(new Event('change', {bubbles: true})); };
+  out.n0 = notes(); out.labels = $$('.nota-l').map(l => l.textContent); out.none = $$('#e0006 .nota').length;  // Todas: notes only on entities that are in a list
+  $('#rows [data-act=pick]').click(); setBox(1, true);                    // add e0002 to Vazia as well: a second, labelled note appears
+  out.n1 = notes();
+  const vz = $$('.nota').find(n => n.dataset.l === 'Vazia'); vz.value = 'outra'; vz.dispatchEvent(new Event('input', {bubbles: true}));
+  window.confirm = () => { out.asked = (out.asked || 0) + 1; return false; };
+  setBox(0, false); out.kept = box(0).checked; out.n2 = notes();          // Favoritas holds a note: asked, cancelled, still there
+  window.confirm = () => true; setBox(0, false); out.n3 = notes();         // confirmed: gone, the other list's note untouched""")
+        assert out["n0"] == [["Favoritas", "e0002", "ligar"], ["Favoritas", "e0004", ""]] and out["labels"] == ["Favoritas", "Favoritas"] and out["none"] == 0
+        assert out["n1"] == [["Favoritas", "e0002", "ligar"], ["Vazia", "e0002", ""], ["Favoritas", "e0004", ""]]
+        assert out["asked"] == 1 and out["kept"] and out["n2"] == [["Favoritas", "e0002", "ligar"], ["Vazia", "e0002", "outra"], ["Favoritas", "e0004", ""]]
+        assert out["n3"] == [["Vazia", "e0002", "outra"], ["Favoritas", "e0004", ""]]
+        assert stored(out) == [["Favoritas", [["e0004", ""], ["e0005", ""]]], ["Vazia", [["e0002", "outra"]]]]
+
+        dom, out = lists("""window.confirm = () => { out.asked = (out.asked || 0) + 1; return false; };
+  $('.lst-rm').click(); out.after1 = $$('#rows tr').length;             // e0002 has a note: asked, cancelled, kept
+  $$('.lst-rm')[1].click(); out.after2 = $$('#rows tr').length;         // e0004 has none: removed without asking""", "l=Favoritas")
+        assert out["asked"] == 1 and out["after1"] == 3 and out["after2"] == 2
+
         dom, out = lists("window.prompt = () => ' Teste '; $('[data-act=new]').click();")
         assert out["hash"] == "#l=Teste" and stored(out) == [FAV, ["Vazia", []], ["Teste", []]]
         dom, out = lists("$('[data-act=del]').click();", "l=Favoritas")

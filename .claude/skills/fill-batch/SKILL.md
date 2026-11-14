@@ -28,7 +28,7 @@ grep -o '^<tr id="e[0-9]*"><td>⬜' index.html | sort -R | head -5 | grep -o '[0
 grep '^<tr id="eID"[ >]' index.html | cut -c1-80
 ```
 
-Drop, and report why, any id that has no match (unknown or `data-removed`) or is already `✅` (the first 80 chars show it). Adjacent rows are fine: commits are applied one after another on one branch.
+Drop, and report why, any id that has no match (unknown or `data-removed`) or is already `✅` or `🔒` (the first 80 chars show it; both are done and never re-queried). Adjacent rows are fine: commits are applied one after another on one branch.
 
 ## 3. Research (parallel)
 
@@ -43,7 +43,7 @@ One Agent call per id, all in the same message so they run in parallel, at most 
 - `model`: `haiku` (Haiku 5.5)
 - `effort`: `medium`
 - `description`: `Research eID`
-- `prompt`: `Use the fill-entity skill for entity ID. Repo: <absolute path of this repo>. OUT: <absolute OUT>. Final reply: exactly one line, ok or FAILED: <reason>.`
+- `prompt`: `Use the fill-entity skill for entity ID. Repo: <absolute path of this repo>. OUT: <absolute OUT>. Final reply: exactly one line, ok, private or FAILED: <reason>.`
 
 Give only those things. The subagent reads the name itself.
 
@@ -64,7 +64,7 @@ One call applies every id, in ascending order:
 scripts/apply_batch.py "$OUT" 0001 0002 0003:"web search unavailable" ...
 ```
 
-Pass each dispatched id: bare if its subagent replied `ok`, `ID:reason` if it replied `FAILED: reason`. The script does the whole per-entity routine and prints one line per id (`eID ok` / `eID FAILED: reason`):
+Pass each dispatched id: bare if its subagent replied `ok` or `private`, `ID:reason` if it replied `FAILED: reason`. The script does the whole per-entity routine and prints one line per id (`eID ok` / `eID private` / `eID FAILED: reason`):
 
 - merges the JSON's `flags` into `adicional` as `Revisar: …` (review notes; they do not stop the commit),
 - `apply_row.py`, checks `git diff --numstat` is exactly `1  1  index.html`, `check.py index.html`, commit `feat(data): fill eID`, `check.py --diff HEAD~1`,
@@ -83,7 +83,7 @@ git push -u origin feat/fill-batch-<stamp>
 gh pr create --title "feat(data): fill N entities" --body-file "$OUT/body.md"
 ```
 
-Body: `OUT/body.md`, as written by step 4 (`--body-file "$OUT/body.md"`). One line per dispatched entity, nothing else: no research notes, no skipped ids (those only go in the final report).
+Body: `OUT/body.md`, as written by step 4 (`--body-file "$OUT/body.md"`). One line per dispatched entity (a 🔒 one reads `🔒 private individual, not published`), nothing else: no research notes, no skipped ids (those only go in the final report).
  GitHub calls can time out: retry a failed `push` or `gh` up to 3 times, waiting 10, 30, 60 seconds. If it still fails, stop and report the exact error; the worktree and branch stay for a human.
 
 ## 6. Queue the merge
@@ -108,10 +108,13 @@ One table, then the counts. Rows come from `OUT/report.tsv`; a committed entity'
 | e0001 | Centro Doutor João dos Santos | auto-merge queued https://github.com/…/pull/12 |
 | e0002 | Clínica Exemplo, Lda.         | FAILED: check.py: Telefone invalid      |
 | e0003 | Escola Exemplo                | skipped: already ✅                     |
+| e0004 | Fulano de Tal                 | 🔒 private individual, not published (auto-merge queued https://github.com/…/pull/12) |
 | e0009 | —                             | skipped: no row                         |
 ```
 
 Nome is in `report.tsv` (copied exactly from the row); ids dropped in step 2 use `—` when they have no row, else the third `<td>`. If the merge was refused, every committed id shows `not merged <reason> <PR URL>`.
+
+A 🔒 row counts as done, not as a failure; list it as above and do not count it under FAILED.
 
 Then: `Remaining ⬜: ` + output of `grep -c '^<tr id="e[0-9]*"><td>⬜' index.html` run on the updated `main` checkout (queued PRs are not merged yet, so they still count).
 

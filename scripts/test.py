@@ -615,14 +615,28 @@ def test_page():
         dom, out = lists(view, "l=Nope")  # unknown list: back to Todas
         assert _count(dom).startswith("60 de 120") and out["rm"] == 0 and out["hash"] == ""
 
-        dom, out = lists("""$('#rows [data-act=pick]').click();
-  out.title = $('#pick-t').textContent; out.open = $('#pick').open; out.cbs = $$('#pick-l input').map(c => [c.dataset.n, c.checked]);
-  const c = $$('#pick-l input')[1]; c.checked = true; c.dispatchEvent(new Event('change', {bubbles: true}));
-  $('#pick-n').value = ' Nova '; $('[data-act=padd]').click();
-  out.cbs2 = $$('#pick-l input').map(c => [c.dataset.n, c.checked]); out.star = $('#rows [data-act=pick]').textContent;""")
-        assert out["open"] and out["title"] == "Listas · Entidade 002" and out["cbs"] == [["Favoritas", True], ["Vazia", False]]
+        dom, out = lists("""const boxes = () => $$('.lst-menu input[type=checkbox]').map(c => [c.dataset.n, c.checked]);
+  $('#rows [data-act=pick]').click();  // the list menu opens right under this card's ★
+  out.menus = $$('.lst-menu').length; out.under = $('.lst-menu').parentElement.parentElement.id; out.label = $('.lst-menu').getAttribute('aria-label');
+  out.expanded = $('#rows [data-act=pick]').getAttribute('aria-expanded'); out.cbs = boxes();
+  const c = $$('.lst-menu input[type=checkbox]')[1]; c.checked = true; c.dispatchEvent(new Event('change', {bubbles: true}));
+  out.stays = $$('.lst-menu').length;  // ticking a box keeps the menu open
+  $('.lst-menu input[type=text]').value = ' Nova '; $('.lst-menu [data-act=padd]').click();
+  out.cbs2 = boxes(); out.star = $('#rows [data-act=pick]').textContent;""")
+        assert out["menus"] == 1 and out["under"] == "e0002" and out["label"] == "Listas de Entidade 002" and out["expanded"] == "true"
+        assert out["cbs"] == [["Favoritas", True], ["Vazia", False]] and out["stays"] == 1
         assert out["cbs2"] == [["Favoritas", True], ["Vazia", True], ["Nova", True]] and out["star"] == "★"
         assert stored(out) == [FAV, ["Vazia", [["e0002", ""]]], ["Nova", [["e0002", ""]]]]
+
+        dom, out = lists("""const stars = () => $$('#rows [data-act=pick]'), menus = () => $$('.lst-menu').length;
+  stars()[0].click(); out.a = menus();                                    // open
+  stars()[1].click(); out.b = menus(); out.where = $('.lst-menu').closest('tr').id;  // another ★: the menu moves, never two
+  document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'})); out.c = menus();  // Esc closes
+  out.focus = document.activeElement.dataset.r;                              // ...and focus returns to that ★
+  stars()[0].click(); document.body.click(); out.d = menus();                // click elsewhere closes
+  stars()[0].click(); stars()[0].click(); out.e = menus();                   // same ★ again closes
+  stars()[0].click(); $('.lst-menu').click(); out.f = menus();               // click inside does not""")
+        assert [out[k] for k in "abcdef"] == [1, 1, 0, 0, 0, 1] and out["where"] == "e0004" and out["focus"] == "e0004", out
 
         dom, out = lists("""$('.lst-rm').click();
   const n = $('.nota'); n.value = 'novo'; n.dispatchEvent(new Event('input', {bubbles: true}));

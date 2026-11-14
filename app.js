@@ -17,7 +17,7 @@ let REMIND = true; // follow-up reminders on/off, per browser
 try { REMIND = localStorage.getItem('iq-remind') !== '0'; } catch { /* no storage: on */ }
 // Custom lists, per browser: list name -> Map(entity id -> note). Maps, so names and ids from imports or links never touch Object.prototype.
 const LIST_MAX = 40, NOTE_MAX = 500;
-let LST = new Map(), SHARE = null, PICK = ''; // SHARE: a list received in a link, waiting to be saved; PICK: entity open in the picker
+let LST = new Map(), SHARE = null, PICK = ''; // SHARE: a list received in a link, waiting to be saved; PICK: entity whose list menu is open
 const ser = () => [...LST].map(([n, m]) => [n, [...m]]); // the storage / backup-file shape
 function saveLists() { try { localStorage.setItem('iq-lists', JSON.stringify(ser())); } catch { /* storage full or blocked */ } }
 function mergeLists(data) { // data has the ser() shape; throws if it does not
@@ -345,14 +345,17 @@ function renderTabs() {
   }
 }
 
-function listCell(r) { // ★ opens the picker; inside a list the row also gets ✕ (remove) and a note
+function listCell(r) { // ★ opens the list menu under it; inside a list the row also gets ✕ (remove) and a note
   const mine = inLists(r), btn = (cls, text, act, label) => {
     const b = el('button', cls, text);
     b.type = 'button'; b.dataset.act = act; b.dataset.r = r.id; b.title = label; b.setAttribute('aria-label', label);
     return b;
   };
-  r.tl.replaceChildren(btn('lst-btn' + (mine.length ? ' on' : ''), mine.length ? '★' : '☆', 'pick',
-    mine.length ? `Listas de ${r.nome}: ${mine.join(', ')}` : `Juntar ${r.nome} a uma lista`));
+  const star = btn('lst-btn' + (mine.length ? ' on' : ''), mine.length ? '★' : '☆', 'pick',
+    mine.length ? `Listas de ${r.nome}: ${mine.join(', ')}` : `Juntar ${r.nome} a uma lista`);
+  star.setAttribute('aria-expanded', r.id === PICK);
+  r.tl.replaceChildren(star);
+  if (r.id === PICK) r.tl.append(listMenu(r));
   r.tn.replaceChildren();
   if (!S.l) return;
   r.tl.prepend(btn('lst-rm', '✕', 'rm', `Tirar ${r.nome} da lista ${S.l}`));
@@ -362,14 +365,21 @@ function listCell(r) { // ★ opens the picker; inside a list the row also gets 
   r.tn.append(note);
 }
 
-function fillPick() { // the picker dialog: one checkbox per list for the entity in PICK
-  $('#pick-t').textContent = `Listas · ${BYID.get(PICK).nome}`;
-  $('#pick-l').replaceChildren(...(LST.size ? [...LST].map(([n, m]) => {
+function listMenu(r) { // the small list under ★: one checkbox per list, plus a field to create one
+  const menu = el('div', 'lst-menu'), nova = el('div', 'nova'), inp = el('input'), add = el('button', '', 'Criar');
+  menu.setAttribute('role', 'group'); menu.setAttribute('aria-label', `Listas de ${r.nome}`);
+  if (!LST.size) menu.append(el('p', '', 'Ainda não tens listas.'));
+  for (const [n, m] of LST) {
     const lab = el('label', 'toggle'), cb = el('input');
-    cb.type = 'checkbox'; cb.checked = m.has(PICK); cb.dataset.n = n;
+    cb.type = 'checkbox'; cb.checked = m.has(r.id); cb.dataset.n = n;
     lab.append(cb, el('span', '', n));
-    return lab;
-  }) : [el('p', '', 'Ainda não tens listas. Cria a primeira aqui em baixo.')]));
+    menu.append(lab);
+  }
+  inp.type = 'text'; inp.maxLength = LIST_MAX; inp.placeholder = 'Nova lista…'; inp.autocomplete = 'off'; inp.setAttribute('aria-label', 'Nome da nova lista');
+  add.type = 'button'; add.dataset.act = 'padd';
+  nova.append(inp, add);
+  menu.append(nova);
+  return menu;
 }
 
 function copy(btn, text) {
@@ -389,12 +399,12 @@ function download(name, text, type) {
 const ACT = { // every [data-act] button
   tab: b => { S.l = b.dataset.l; S.p = 1; update(); },
   new: () => { const k = addList(prompt('Nome da nova lista')); if (k) { S.l = k; S.p = 1; update(); } },
-  pick: b => { PICK = b.dataset.r; fillPick(); $('#pick').showModal(); },
-  padd: () => { // create a list from the picker and put the entity in it
-    const k = addList($('#pick-n').value);
+  pick: b => { PICK = PICK === b.dataset.r ? '' : b.dataset.r; update(); $('.lst-menu input')?.focus(); }, // second click on the same ★ closes it
+  padd: b => { // create a list from the menu and put the entity in it
+    const k = addList(b.closest('.lst-menu').querySelector('input[type=text]').value);
     if (!k) return;
     if (!LST.get(k).has(PICK)) LST.get(k).set(PICK, '');
-    $('#pick-n').value = ''; saveLists(); fillPick(); update();
+    saveLists(); update(); $('.lst-menu input[type=text]').focus();
   },
   rm: b => { LST.get(S.l).delete(b.dataset.r); saveLists(); update(); },
   emails: b => copy(b, emails().join('; ')),
@@ -403,7 +413,7 @@ const ACT = { // every [data-act] button
     // ponytail: ';' separator because pt-PT Excel expects it (Sheets detects either)
     const cell = v => { v = String(v ?? ''); return '"' + (/^[=+\-@\t\r]/.test(v) ? "'" : '') + v.replace(/"/g, '""') + '"'; }; // a leading = + - @ gets a ' so spreadsheets do not run it as a formula
     const rows = members().map(r => [r.n, r.nome, r.local, r.distrito, r.morada, r.email, r.tel?.replace(/^\+351 /, ''), r.site, STATUS[stOf(r)], LST.get(S.l).get(r.id)]);
-    download(slug() + '.csv', '﻿' + [['Nº', 'Nome', 'Local', 'Distrito', 'Morada', 'E-mail', 'Telefone', 'Website', 'Seguimento', 'Nota'], ...rows]
+    download(slug() + '.csv', '\ufeff' + [['Nº', 'Nome', 'Local', 'Distrito', 'Morada', 'E-mail', 'Telefone', 'Website', 'Seguimento', 'Nota'], ...rows]
       .map(x => x.map(cell).join(';')).join('\r\n'), 'text/csv;charset=utf-8');
   },
   del: () => {
@@ -419,15 +429,26 @@ const ACT = { // every [data-act] button
   exp: () => download('abre-portas-listas.json', JSON.stringify(ser()), 'application/json'),
   imp: () => $('#imp-f').click(),
 };
-document.addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b) ACT[b.dataset.act](b); });
-$('#pick-l').addEventListener('change', e => {
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-act]');
+  if (PICK && !e.target.closest('.lst-menu, [data-act=pick]')) { PICK = ''; update(); } // click anywhere else closes the list menu
+  if (b) ACT[b.dataset.act](b);
+});
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape' || !PICK) return;
+  const r = BYID.get(PICK);
+  PICK = ''; update(); r.tl.querySelector('.lst-btn')?.focus(); // update() rebuilt the ★: give focus back to it
+});
+tbody.addEventListener('change', e => { // checkbox in the list menu
   const m = LST.get(e.target.dataset.n);
+  if (!m) return;
   if (e.target.checked) m.set(PICK, m.get(PICK) ?? ''); else m.delete(PICK);
   saveLists(); update();
+  [...document.querySelectorAll('.lst-menu input[type=checkbox]')].find(c => c.dataset.n === e.target.dataset.n)?.focus(); // keep keyboard focus on the same checkbox
 });
-$('#pick-n').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); ACT.padd(); } });
-$('#pick').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.close(); }); // click on the backdrop
-$('#pick').addEventListener('close', () => BYID.get(PICK)?.tl?.querySelector('.lst-btn')?.focus()); // update() rebuilt the button: give focus back
+tbody.addEventListener('keydown', e => { // Enter in the new-list field
+  if (e.key === 'Enter' && e.target.matches('.lst-menu input[type=text]')) { e.preventDefault(); ACT.padd(e.target); }
+});
 tbody.addEventListener('input', e => { // note inside a list: saved as you type
   if (e.target.classList.contains('nota')) { LST.get(S.l).set(e.target.dataset.r, e.target.value.slice(0, NOTE_MAX)); saveLists(); }
 });

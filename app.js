@@ -40,7 +40,7 @@ function bizDays(t) { // Mon-Fri days from the day after t up to today
 }
 const stOf = r => (Object.hasOwn(STATUS, SAVED[r.id]?.s) ? SAVED[r.id].s : 'ver');
 const KEY = { // sortable column -> value; null = missing, sorts last in both directions
-  estado: r => +r.ok, n: r => r.n, nome: r => r.nome, local: r => r.local, distrito: r => r.distrito,
+  estado: r => (r.ok ? 2 : +r.priv), n: r => r.n, nome: r => r.nome, local: r => r.local, distrito: r => r.distrito,
   areas: r => (r.areas[0] && r.areas[0] !== 'desconhecido' ? AREAS[r.areas[0]][1] : null),
 };
 const COLL = new Intl.Collator('pt', { sensitivity: 'base', numeric: true });
@@ -58,7 +58,7 @@ function parse() {
     const c = el.cells, miss = td => !td.textContent || td.firstElementChild?.tagName === 'I';
     const val = i => (miss(c[i]) ? null : c[i].textContent);
     const areas = miss(c[6]) ? (c[6].firstElementChild ? ['desconhecido'] : []) : c[6].textContent.split(' ');
-    return { el, id: el.id, n: +c[1].textContent, ok: c[0].textContent === '✅', removed: 'removed' in el.dataset,
+    return { el, id: el.id, n: +c[1].textContent, ok: c[0].textContent === '✅', priv: c[0].textContent === '🔒', removed: 'removed' in el.dataset,
       empty: Array.from(c).slice(3, 11).every(miss),
       nome: c[2].textContent, local: val(3), distrito: val(4), dUnk: !!c[4].firstElementChild, areas,
       kNome: norm(c[2].textContent), contacto: !!(val(8) || val(9) || val(10)), done: false,
@@ -85,7 +85,7 @@ function readState() {
   const q = new URLSearchParams(location.hash.slice(1)), g = k => q.get(k) || '';
   S = { ...defaults(), nome: g('nome'), c: g('c'), d: g('d'), l: LST.has(g('l')) ? g('l') : '',
     a: g('a').split(',').filter(k => Object.hasOwn(AREAS, k)), st: g('st').split(',').filter(k => Object.hasOwn(STATUS, k)), vazias: g('vazias') === '1', contacto: g('contacto') === '1',
-    estado: ['todos', 'todo'].includes(g('estado')) ? g('estado') : 'ok',
+    estado: ['todos', 'todo', 'priv'].includes(g('estado')) ? g('estado') : 'ok',
     ord: Object.hasOwn(KEY, g('ord')) ? g('ord') : 'n', dir: g('dir') === 'desc' ? 'desc' : 'asc', p: parseInt(g('p'), 10) || 1,
     pp: SIZES.includes(+g('pp')) ? +g('pp') : PP };
   SHARE = parseShare(g('share'));
@@ -126,7 +126,7 @@ function matches(r, q) {
     && (!S.st.length || S.st.includes(stOf(r)))
     && (!S.a.length || S.a.some(a => r.areas.includes(a)))
     && (S.l ? LST.get(S.l).has(r.id) // inside a list every member shows, filled or not
-      : (S.estado === 'todos' || r.ok === (S.estado === 'ok')) && (S.vazias || !(r.ok && r.empty)))
+      : (S.estado === 'todos' || (S.estado === 'ok' ? r.ok : S.estado === 'priv' ? r.priv : !r.ok && !r.priv)) && (S.vazias || !(r.ok && r.empty)))
     && !r.removed && (!S.contacto || r.contacto);
 }
 
@@ -163,7 +163,8 @@ function enhance(r) {
   const c = r.el.cells, has = td => td.textContent && !td.firstElementChild;
   r.el.setAttribute('role', 'row');
   for (const td of c) td.setAttribute('role', 'cell');
-  const st = el('span', r.ok ? 'st' : 'st st-todo', c[0].textContent), label = r.ok ? 'Preenchido' : 'Por preencher';
+  const st = el('span', r.ok || r.priv ? 'st' : 'st st-todo', c[0].textContent),
+    label = r.ok ? 'Preenchido' : r.priv ? 'Pessoa singular: dados não publicados' : 'Por preencher';
   st.setAttribute('role', 'img'); st.setAttribute('aria-label', label); st.title = label;
   const src = r.el.dataset.src;
   if (src) { // sources popup: <details> gives click/tap/keyboard for free

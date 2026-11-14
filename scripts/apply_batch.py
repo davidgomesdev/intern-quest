@@ -5,7 +5,7 @@ Usage: scripts/apply_batch.py OUT ID[:reason] ...
   ID          apply OUT/eID.json (flags merged into adicional), check, commit "feat(data): fill eID"
   ID:reason   subagent already failed; recorded as FAILED, nothing applied
 
-Prints one line per id ("eID ok" / "eID FAILED: reason") and writes
+Prints one line per id ("eID ok" / "eID private" / "eID FAILED: reason") and writes
 OUT/body.md (PR "## Entities" list) and OUT/report.tsv (id, nome, result).
 Any failed step resets that entity (git reset --hard HEAD) and goes on.
 A failed commit (hook/signing) aborts the batch: exit 3, error on stderr.
@@ -80,8 +80,12 @@ def main(argv):
             run('git', 'reset', '--hard', 'HEAD')
             line, res = f'- {rid} ({n}): FAILED: {why}', f'FAILED: {why}'
         else:
-            src = (json.loads((out / f'{rid}.json').read_text(encoding='utf-8')).get('sources') or [])
-            line, res = f'- {rid} ({n}): ok, ' + (', '.join(src) or 'no sources found'), 'ok'
+            d = json.loads((out / f'{rid}.json').read_text(encoding='utf-8'))
+            src = d.get('sources') or []
+            if d.get('private'):
+                line, res = f'- {rid} ({n}): 🔒 private individual, not published', 'private'
+            else:
+                line, res = f'- {rid} ({n}): ok, ' + (', '.join(src) or 'no sources found'), 'ok'
         body.append(line)
         rows.append(f'{rid}\t{n}\t{res}')
         print(f'{rid} {res}')

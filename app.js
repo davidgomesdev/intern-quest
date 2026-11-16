@@ -248,7 +248,7 @@ function followUp() { // banner: note statuses set 5+ days ago
   for (const r of due) {
     const days = bizDays(SAVED[r.id].t), li = el('li');
     li.dataset.st = stOf(r);
-    li.append(link(`#nome=${encodeURIComponent(r.nome)}&estado=todos&vazias=1`, `${r.n} ${r.nome}`), el('span', '', ` · ${STATUS[stOf(r)]}, há ${days} dias úteis`));
+    li.append(link(`#nome=${encodeURIComponent(r.nome)}&estado=todos&vazias=1`, r.nome), el('span', '', ` · ${STATUS[stOf(r)]}, há ${days} dias úteis`));
     ul.append(li);
   }
   box.replaceChildren(el('strong', '', `🔔 ${due.length} ${due.length > 1 ? 'entidades precisam' : 'entidade precisa'} de seguimento`), ul);

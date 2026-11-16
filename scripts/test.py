@@ -502,7 +502,7 @@ def _text(dom, pat):
     return re.sub(r"<[^>]+>", "", m.group(1)) if m else None
 
 
-def _count(dom): return re.sub(rr' \(\d+ ainda por preencher\)$', '', _text(dom, r'<p id="count"[^>]*>(.*?)</p>'))  # the coverage hint is checked in _part_filters
+def _count(dom): return re.sub(r' \(\d+ ainda por preencher\)$', '', _text(dom, r'<p id="count"[^>]*>(.*?)</p>'))  # the coverage hint is checked in _part_filters
 def _pending(dom): return re.search(r' \((\d+) ainda por preencher\)$', _text(dom, r'<p id="count"[^>]*>(.*?)</p>'))
 def _ativos(dom): return _text(dom, r'<span id="ativos">(.*?)</span>')
 def _pager(dom): return _text(dom, r'<nav class="pager"[^>]*>.*?<span>(.*?)</span>')

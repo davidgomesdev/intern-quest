@@ -504,7 +504,17 @@ try {
 }
 document.addEventListener('click', e => document.querySelectorAll('details.src[open]').forEach(d => { if (!d.contains(e.target)) d.open = false; }));
 
-// ? badge in the Estado filter: toggles the explanation (works on touch, where a title tooltip doesn't)
-const tipToggle = e => { const h = e.target.closest('.help'); if (!h) return; e.preventDefault(); $('#priv-tip').hidden = !$('#priv-tip').hidden; };
-form.addEventListener('click', tipToggle);
-form.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') tipToggle(e); });
+// ? badge in the Estado filter: press to show the explanation as a tooltip (works on touch, where title doesn't)
+const tip = $('#priv-tip');
+const tipToggle = e => {
+  const h = e.target.closest('.help');
+  if (!h) { tip.hidden = true; return; }
+  e.preventDefault();
+  tip.hidden = !tip.hidden;
+  if (tip.hidden) return;
+  const r = h.getBoundingClientRect();
+  tip.style.top = r.bottom + 6 + 'px';
+  tip.style.left = Math.max(8, Math.min(r.left - 8, innerWidth - tip.offsetWidth - 8)) + 'px';
+};
+document.addEventListener('click', tipToggle);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') tip.hidden = true; else if ((e.key === 'Enter' || e.key === ' ') && e.target.closest?.('.help')) tipToggle(e); });

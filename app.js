@@ -503,3 +503,8 @@ try {
   throw e;
 }
 document.addEventListener('click', e => document.querySelectorAll('details.src[open]').forEach(d => { if (!d.contains(e.target)) d.open = false; }));
+
+// ? badge in the Estado filter: toggles the explanation (works on touch, where a title tooltip doesn't)
+const tipToggle = e => { const h = e.target.closest('.help'); if (!h) return; e.preventDefault(); $('#priv-tip').hidden = !$('#priv-tip').hidden; };
+form.addEventListener('click', tipToggle);
+form.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') tipToggle(e); });

@@ -103,6 +103,7 @@ button:disabled { color: var(--muted); border-style: dashed; cursor: default; }
 .barra, .pager-fim { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s4); align-items: center; padding: var(--s4) 0 var(--s2); }
 #count { margin: 0; font-size: 15px; }
 #count strong { font: 700 20px/1 var(--round); font-variant-numeric: tabular-nums; }
+#count .ver { font: inherit; padding: 0; border: 0; background: none; color: inherit; text-decoration: underline; cursor: pointer; }
 .pp { margin-left: auto; font-size: 14px; color: var(--muted); display: inline-flex; gap: var(--s2); align-items: center; }
 .pp + .pager { margin-left: 0; }
 .pager { margin-left: auto; display: flex; gap: var(--s2); align-items: center; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }

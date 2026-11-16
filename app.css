@@ -331,3 +331,5 @@ td:nth-child(13) { position: relative; grid-column: 2 / 4; grid-row: 6; padding-
   .lst-menu .nova input { font-size: 16px; min-height: 40px; }
   .lst-menu .nova button { min-height: 40px; }
 }
+
+.help { font-style: normal; font-size: .75em; cursor: help; border: 1px solid currentColor; border-radius: 50%; padding: 0 .35em; opacity: .7; }

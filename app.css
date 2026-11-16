@@ -332,6 +332,6 @@ td:nth-child(13) { position: relative; grid-column: 2 / 4; grid-row: 6; padding-
   .lst-menu .nova button { min-height: 40px; }
 }
 
-.help { font-style: normal; font-size: .75em; cursor: pointer; border: 1px solid currentColor; border-radius: 50%; padding: 0 .35em; opacity: .7; }
+.help { display: block; width: 1.4em; height: 1.4em; line-height: 1.3em; margin-top: .3em; text-align: center; font-style: normal; font-size: .75em; cursor: pointer; border: 1px solid currentColor; border-radius: 50%; opacity: .7; }
 .tip { position: fixed; z-index: 10; margin: 0; max-width: min(18rem, calc(100vw - 16px)); padding: .5em .7em; font-size: .85em; border-radius: 6px; background: #222; color: #fff; box-shadow: 0 2px 8px #0005; }
 .tip[hidden] { display: none; }

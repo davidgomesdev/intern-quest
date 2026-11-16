@@ -221,12 +221,7 @@ function renderCount(list, last) {
   const total = S.l ? LST.get(S.l).size : TOTAL, filled = list.filter(r => r.ok).length;
   $('#count').replaceChildren(el('strong', '', list.length), ` de ${total} entidades, ${filled} com dados`);
   const todo = S.l || S.estado !== 'ok' ? 0 : ROWS.filter(r => matches(r, { nome: norm(S.nome), estado: 'todo' })).length; // the default filter hides ⬜ rows: say how many
-  if (todo) {
-    const b = el('button', 'ver', 'ver todas'); b.type = 'button';
-    b.onclick = () => form.querySelector('[name=estado][value=todos]').click();
-    const pend = el('span', 'pend'); pend.append(` · ${todo} ainda por preencher (`, b, ')');
-    $('#count').append(pend);
-  }
+  if (todo) $('#count').append(el('span', 'pend', ` (${todo} ainda por preencher)`));
   document.querySelectorAll('.pager').forEach(p => {
     p.querySelector('span').textContent = `Página ${S.p} de ${last}`;
     p.querySelector('[data-p=prev]').disabled = S.p <= 1;

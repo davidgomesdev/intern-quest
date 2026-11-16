@@ -502,7 +502,8 @@ def _text(dom, pat):
     return re.sub(r"<[^>]+>", "", m.group(1)) if m else None
 
 
-def _count(dom): return _text(dom, r'<p id="count"[^>]*>(.*?)</p>')
+def _count(dom): return re.sub(r' · \d+ ainda por pesquisar \(ver todas\)$', '', _text(dom, r'<p id="count"[^>]*>(.*?)</p>'))  # the coverage hint is checked in _part_filters
+def _pending(dom): return re.search(r' · (\d+) ainda por pesquisar \(ver todas\)$', _text(dom, r'<p id="count"[^>]*>(.*?)</p>'))
 def _ativos(dom): return _text(dom, r'<span id="ativos">(.*?)</span>')
 def _pager(dom): return _text(dom, r'<nav class="pager"[^>]*>.*?<span>(.*?)</span>')
 def _disabled(dom): return len(re.findall(r'data-p="(?:prev|next)"[^>]*disabled', dom))
@@ -790,6 +791,7 @@ def _part_filters():
         dom = small(h)
         assert _count(dom) == want, (h, _count(dom), want)
         assert _ativos(dom) == act, (h, _ativos(dom))
+    assert _pending(small("")).group(1) == "1" and not _pending(small("estado=todos"))  # default hides 1 ⬜ row; asking for all drops the hint
     for h in ["ord=__proto__", "ord=constructor", "a=constructor"]:
         dom = small(h)
         assert _ids(dom) == ["e0001", "e0003", "e0004"], h

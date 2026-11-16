@@ -197,7 +197,7 @@ footer { padding: var(--s4) 0 var(--s6); font-size: 13px; color: var(--muted); }
   tbody tr { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 0; padding: var(--s3); }
   td:nth-child(n) { flex: 1 1 100%; padding-left: 0; padding-right: 0; }
   td:nth-child(1) { flex: 0 0 auto; font-size: 18px; margin-right: 8px; }
-  .help { position: static; display: inline-block; margin-left: 6px; vertical-align: middle; }
+  td .help { position: static; display: inline-block; margin-left: 6px; vertical-align: middle; } /* td: outranks the base .help rule further down */
   td:nth-child(2) { flex: 1 1 auto; text-align: right; }
   td:nth-child(4), td:nth-child(5) { flex: 0 1 auto; }
   td:nth-child(8):not(:has(> i)) { padding-left: 10px; }

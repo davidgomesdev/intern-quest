@@ -224,7 +224,8 @@ function renderCount(list, last) {
   if (todo) {
     const b = el('button', 'ver', 'ver todas'); b.type = 'button';
     b.onclick = () => form.querySelector('[name=estado][value=todos]').click();
-    $('#count').append(` · ${todo} ainda por pesquisar (`, b, ')');
+    const pend = el('span', 'pend'); pend.append(` · ${todo} ainda por preencher (`, b, ')');
+    $('#count').append(pend);
   }
   document.querySelectorAll('.pager').forEach(p => {
     p.querySelector('span').textContent = `Página ${S.p} de ${last}`;

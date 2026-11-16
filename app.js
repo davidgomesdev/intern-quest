@@ -85,7 +85,7 @@ function readState() {
   const q = new URLSearchParams(location.hash.slice(1)), g = k => q.get(k) || '';
   S = { ...defaults(), nome: g('nome'), c: g('c'), d: g('d'), l: LST.has(g('l')) ? g('l') : '',
     a: g('a').split(',').filter(k => Object.hasOwn(AREAS, k)), st: g('st').split(',').filter(k => Object.hasOwn(STATUS, k)), vazias: g('vazias') === '1', contacto: g('contacto') === '1',
-    estado: ['todos', 'todo', 'priv'].includes(g('estado')) ? g('estado') : 'ok',
+    estado: ['todos', 'todo'].includes(g('estado')) ? g('estado') : 'ok',
     ord: Object.hasOwn(KEY, g('ord')) ? g('ord') : 'n', dir: g('dir') === 'desc' ? 'desc' : 'asc', p: parseInt(g('p'), 10) || 1,
     pp: SIZES.includes(+g('pp')) ? +g('pp') : PP };
   SHARE = parseShare(g('share'));
@@ -126,7 +126,7 @@ function matches(r, q) {
     && (!S.st.length || S.st.includes(stOf(r)))
     && (!S.a.length || S.a.some(a => r.areas.includes(a)))
     && (S.l ? LST.get(S.l).has(r.id) // inside a list every member shows, filled or not
-      : (S.estado === 'todos' || (S.estado === 'ok' ? r.ok : S.estado === 'priv' ? r.priv : !r.ok && !r.priv)) && (S.vazias || !(r.ok && r.empty)))
+      : (S.estado === 'todos' || (S.estado === 'ok' ? r.ok : !r.ok && !r.priv)) && (S.vazias || !(r.ok && r.empty)))
     && !r.removed && (!S.contacto || r.contacto);
 }
 
@@ -174,6 +174,10 @@ function enhance(r) {
     box.append(el('strong', null, 'Fontes'), ...src.split(' ').map(u => link(u, u.replace(/^https?:\/\/(www\.)?/, ''), true)));
     d.append(sm, box); c[0].replaceChildren(d);
   } else c[0].replaceChildren(st);
+  if (r.priv) { // ? next to the lock: press to explain (see the tooltip handler at the bottom)
+    const h = el('i', 'help', '?'); h.setAttribute('role', 'button'); h.tabIndex = 0; h.setAttribute('aria-label', 'O que é isto?');
+    c[0].append(h);
+  }
   if (r.local && r.distrito && !LOC[r.distrito]?.has(r.local)) { // Local belongs to another Distrito
     const home = Object.keys(LOC).filter(d => LOC[d].has(r.local));
     if (home.length) c[4].append(el('span', 'conf', `⚠ ${r.local} fica em ${home.join(' ou ')}, não em ${r.distrito}`));

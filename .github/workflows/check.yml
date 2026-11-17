@@ -13,9 +13,20 @@ jobs:
         env: { BASE: "${{ github.base_ref }}", HEAD: "${{ github.head_ref }}" }
         run: scripts/check.py --diff "origin/$BASE" --branch "$HEAD"
       - run: scripts/test.py
+  scope:
+    # Fill-batch PRs may only touch index.html.
+    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'feat/fill-batch-')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 0 }
+      - env: { BASE: "${{ github.base_ref }}" }
+        run: |
+          extra=$(git diff --name-only "origin/$BASE...HEAD" | grep -vx 'index.html' || true)
+          if [ -n "$extra" ]; then echo "fill-batch PR changes files besides index.html:"; echo "$extra"; exit 1; fi
   merge:
-    # Fill-batch PRs only: merge once `check` has passed. The agent never merges.
-    needs: check
+    # Fill-batch PRs only: merge once `check` and `scope` have passed. The agent never merges.
+    needs: [check, scope]
     if: >
       github.event_name == 'pull_request' &&
       github.event.pull_request.head.repo.full_name == github.repository &&

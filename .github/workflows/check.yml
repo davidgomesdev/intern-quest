@@ -13,3 +13,16 @@ jobs:
         env: { BASE: "${{ github.base_ref }}", HEAD: "${{ github.head_ref }}" }
         run: scripts/check.py --diff "origin/$BASE" --branch "$HEAD"
       - run: scripts/test.py
+  merge:
+    # Fill-batch PRs only: merge once `check` has passed. The agent never merges.
+    needs: check
+    if: >
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.head_ref, 'feat/fill-batch-') &&
+      github.event.pull_request.user.login == github.repository_owner
+    runs-on: ubuntu-latest
+    permissions: { contents: write, pull-requests: write }
+    steps:
+      - run: gh pr merge --rebase "$PR_URL"
+        env: { GH_TOKEN: "${{ github.token }}", PR_URL: "${{ github.event.pull_request.html_url }}" }

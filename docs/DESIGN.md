@@ -310,7 +310,7 @@ jobs:
       - run: scripts/test.py
 ```
 
-- Mark `check` as a required status check under branch protection on `main`, and require 1 review. Nothing auto-merges.
+- Mark `check` as a required status check under branch protection on `main`, and do not require a review. Only fill-batch PRs (`feat/fill-batch-*`, opened by the repo owner) are merged, by the `merge` job in `check.yml` after `check` passes; every other PR is merged by a human.
 - **Pages:** Settings → Pages → "Deploy from a branch" → `main` / `(root)`, as the spec confirms. No deploy workflow is needed; `.nojekyll` makes it a plain file copy.
 - **Pages limit:** Pages has a soft limit of 10 builds per hour, and it applies to branch deployments; custom Actions workflows are exempt (GitHub docs). Merging more than 10 entity PRs in an hour may delay a build, but the latest commit still deploys. See D4.
 

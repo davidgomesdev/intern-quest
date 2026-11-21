@@ -285,10 +285,8 @@ input[name=st] + span::before { content: ""; display: inline-block; width: .6em;
 #backup { margin: 0 0 var(--s5); font-size: 14px; color: var(--muted); }
 #backup summary { cursor: pointer; }
 #backup button { margin-right: var(--s2); }
-#backup .ajuda { display: inline; }
-#backup .ajuda summary { display: inline-block; width: 1.5em; height: 1.5em; line-height: 1.5em; text-align: center; border: 1px solid var(--rule); border-radius: 50%; cursor: pointer; list-style: none; }
-#backup .ajuda summary::-webkit-details-marker { display: none; }
-#backup .ajuda span { display: block; margin-top: var(--s2); }
+#backup summary { font-weight: 700; }
+#backup .ajuda { width: 1.6em; height: 1.6em; min-height: 0; padding: 0; margin-left: var(--s2); border-radius: 50%; font-weight: 700; }
 
 /* ★ / ✕ sit in the Nº cell right after the 🚩 and share its flat look; the note gets its own row at the bottom */
 .lst { position: relative; display: inline-block; white-space: nowrap; }

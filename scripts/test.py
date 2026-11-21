@@ -348,6 +348,31 @@ def test_apply_row_refill_keeps_located_contacts():
     assert "data-loc" not in dup and check.check_row(dup) == []
 
 
+def test_apply_row_refill_keeps_old_locations():
+    old = row(["🔄", "0001", "X", "Lisboa", "Lisboa", "Rua A"] + FILLED_CELLS[6:])
+    new = apply_row.build(old, {"locations": [{"local": "Porto", "distrito": "Porto"}]})
+    assert check.check_row(new) == []
+    data = json.loads(html.unescape(re.search(r'data-loc="([^"]*)"', new).group(1)))
+    assert data["l"] == [{"local": "Lisboa", "distrito": "Lisboa", "morada": "Rua A"}, {"local": "Porto", "distrito": "Porto"}], data
+    # a new location matching an old one on (local, distrito) takes the old morada / phone / e-mail it lacks
+    lisboa = {"local": "Lisboa", "distrito": "Lisboa", "morada": "Rua A", "telefone": "+351 213 000 000", "email": "l@x.pt"}
+    old2 = row(["🔄", "0001", "X", "Lisboa", "Lisboa", "Rua A"] + FILLED_CELLS[6:9] + ["l@x.pt", "+351 213 000 000"], attr=loc_attr({"l": [lisboa, {"local": "Faro", "distrito": "Faro"}], "t": [], "e": []}))
+    merged = apply_row.build(old2, {"locations": [{"local": "Lisboa", "distrito": "Lisboa", "morada": "Rua B"}, {"local": "Faro", "distrito": "Faro", "morada": "Rua F"}]})
+    d2 = json.loads(html.unescape(re.search(r'data-loc="([^"]*)"', merged).group(1)))
+    assert d2["l"] == [{**lisboa, "morada": "Rua B"}, {"local": "Faro", "distrito": "Faro", "morada": "Rua F"}], d2  # new value wins, empties filled
+    # cleared locations: only the new ones stay
+    gone = apply_row.build(old, {"locations": [{"local": "Porto", "distrito": "Porto"}], "cleared": ["locations"]})
+    assert "Rua A" not in gone and "<td>Porto</td>" in gone and check.check_row(gone) == []
+
+
+def test_apply_row_loose_contacts():
+    new = apply_row.build(row(["⬜", "0001", "X"] + [""] * 8), {"telefones": ["+351 912 000 000", "+351 913 000 000"], "areas": ["justica"]})
+    assert check.check_row(new) == [], check.check_row(new)
+    data = json.loads(html.unescape(re.search(r'data-loc="([^"]*)"', new).group(1)))
+    assert data == {"l": [], "t": ["+351 912 000 000", "+351 913 000 000"], "e": []}
+    assert "<td>+351 912 000 000</td>" in new and check.check_row(loc_row({"l": [], "t": ["+351 912 000 000"], "e": []})) != []  # one phone: not needed
+
+
 def test_apply_batch():
     """End to end in a throwaway repo: one ok commit, one pre-failed, one missing JSON."""
     d = tempfile.mkdtemp()
@@ -848,6 +873,7 @@ def _jobs(tmp, fixture):
     sweep("orph", orph_rows, ORPH)
     sweep("badurl", bad_rows, [""])
     sweep("loc", _fixture("rows-loc"), LOCH)
+    sweep("locedge", _locedge_rows(), [ALL])
     for name, (body, h, seed, fx) in SCENARIOS.items():
         jobs.append(("lists:" + name, Page(tmp, _fixture(fx) if fx else rows, LISTS_JS.replace("%SEED%", seed).replace("%BODY%", body)).path, h, 20000))
     jobs.append(("trace", Page(tmp, rows, TRACE).path, "", 20000))
@@ -1127,6 +1153,16 @@ def _part_lists_b():
     assert out["tabs"] == ["Todas", "__proto__1", "ok1", "+ Nova lista"], out["tabs"]  # hostile names are plain names; bad ids and blank names dropped
 
 
+def _locedge_rows():
+    """Rows the app must survive or order by rank: no location but two phones; a Faro head office; three wrong-shape data-loc."""
+    rank = {"l": [{"local": "Faro", "distrito": "Faro", "main": True}, {"local": "Porto", "distrito": "Porto"}], "t": ["+351 289 000 000", "+351 222 000 000"], "e": []}
+    loose = {"l": [], "t": ["+351 912 000 000", "+351 913 000 000"], "e": []}
+    rows = [loc_row(rank), loc_row(loose).replace('id="e0001"', 'id="e0002"')]
+    for n, raw in enumerate([[1, 2], {"l": "x"}, {"l": [None, 3], "t": "zz"}], 3):
+        rows.append(row(FILLED_CELLS, id_=f"e000{n}", attr=loc_attr(raw)))
+    return rows
+
+
 def _part_locations():
     R = _results()
     if not R:
@@ -1150,6 +1186,12 @@ def _part_locations():
     assert _ids(c) == ["e0013"] and "Cascais" in _cell(c, "e0013", 3) and "(recomendado)" in _cell(c, "e0013", 10)
     assert "e0012" in _ids(f) and "289 000 000" in _cell(f, "e0012", 10)
     assert "e0014" not in _ids(u)  # it has Braga
+
+    e = R.sweep("locedge", [ALL])(ALL)
+    assert _ids(e) == ["e0001", "e0002", "e0003", "e0004", "e0005"] and 'class="ready"' in e  # a wrong-shape data-loc never blanks the page
+    c1 = _cell(e, "e0001", 10)
+    assert "222 000 000" in c1 and "289 000 000" not in c1, c1  # no Distrito chosen: rank order, not the shown location's district
+    assert "912 000 000" in _cell(e, "e0002", 10) and "Outros contactos" in e and "913 000 000" in e  # no location: contacts still listed
 
     dom, out = R.lists("locexport")
     assert out["mails"] == "geral@rede.example; info@gata.example", out["mails"]  # one address per entity

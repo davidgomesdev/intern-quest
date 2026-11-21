@@ -32,6 +32,17 @@ function mergeLists(data) { // data has the ser() shape; throws if it does not
   }
 }
 try { mergeLists(JSON.parse(localStorage.getItem('iq-lists') || '[]')); } catch { /* no storage or corrupt: keep what parsed */ }
+const backup = () => ({ listas: ser(), estados: SAVED }); // the backup file / link payload
+function mergeBackup(d) { // lists merge by name; per entity the newest status wins. An array is the old lists-only file.
+  mergeLists(Array.isArray(d) ? d : d.listas);
+  for (const [id, v] of Object.entries(d.estados || {})) {
+    if (/^e\d{4,}$/.test(id) && Object.hasOwn(STATUS, v?.s) && Number.isFinite(v.t) && !(SAVED[id]?.t >= v.t)) SAVED[id] = { s: v.s, t: v.t };
+  }
+  try { localStorage.setItem('iq-status', JSON.stringify(SAVED)); } catch { /* storage full or blocked */ }
+  saveLists();
+}
+const linked = new URLSearchParams(location.hash.slice(1)).get('copia'); // link from another device: #copia=<json>; writeState() drops it from the URL
+if (linked) try { mergeBackup(JSON.parse(linked)); } catch { /* bad link: ignore */ }
 function bizDays(t) { // Mon-Fri days from the day after t up to today
   let n = 0;
   const end = new Date().setHours(0, 0, 0, 0);
@@ -442,8 +453,9 @@ const ACT = { // every [data-act] button
     LST.set(SHARE.name, m); S.l = SHARE.name; S.p = 1; SHARE = null; saveLists(); update();
   },
   shskip: () => { SHARE = null; update(); },
-  exp: () => download('abre-portas-copia.json', JSON.stringify({ listas: ser(), estados: SAVED }), 'application/json'),
+  exp: () => download('abre-portas-copia.json', JSON.stringify(backup()), 'application/json'),
   imp: () => $('#imp-f').click(),
+  lnk: b => copy(b, location.href.replace(/#.*/, '') + '#copia=' + encodeURIComponent(JSON.stringify(backup()))),
 };
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]');
@@ -481,15 +493,7 @@ $('#imp-f').addEventListener('change', async e => {
   const f = e.target.files[0];
   e.target.value = '';
   if (!f) return;
-  try {
-    const d = JSON.parse(await f.text());
-    mergeLists(Array.isArray(d) ? d : d.listas); // an array is the old lists-only file
-    for (const [id, v] of Object.entries(d.estados || {})) { // statuses: keep the newest change per entity
-      if (/^e\d{4,}$/.test(id) && Object.hasOwn(STATUS, v?.s) && Number.isFinite(v.t) && !(SAVED[id]?.t >= v.t)) SAVED[id] = { s: v.s, t: v.t };
-    }
-    try { localStorage.setItem('iq-status', JSON.stringify(SAVED)); } catch { /* storage full or blocked */ }
-    saveLists(); update(); alert('Cópia importada.');
-  }
+  try { mergeBackup(JSON.parse(await f.text())); update(); alert('Cópia importada.'); }
   catch { alert('Ficheiro inválido. Usa um ficheiro exportado daqui.'); }
 });
 

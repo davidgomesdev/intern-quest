@@ -24,17 +24,17 @@ Repo contents (small on purpose): `index.html`, its CSS and JS files, `README.md
 
 | # | Column | Type | Notes |
 |---|--------|------|-------|
-| 1 | Status | emoji | `⬜` NOT-FILLED, `✅` FILLED, `🔒` PRIVATE INDIVIDUAL |
+| 1 | Status | emoji | `⬜` NOT-FILLED, `✅` FILLED, `🔄` PENDING RE-RESEARCH, `🔒` PRIVATE INDIVIDUAL |
 | 2 | Nº | int | OPP protocol number; also the row id |
 | 3 | Nome | text | From OPP; never edited by subagents |
-| 4 | Local | text | One name from `lookup/<Distrito>.txt` (município; for Lisboa also its freguesias). See 4.2 |
-| 5 | Distrito | text | One of `lookup/distritos.txt` (18 distritos plus Açores and Madeira), matched from the Morada; else `<i>desconhecido</i>` |
-| 6 | Morada | text | Street address, as found |
+| 4 | Local | text | One name from `lookup/<Distrito>.txt` (município; for Lisboa also its freguesias). The first location (4.4). See 4.2 |
+| 5 | Distrito | text | One of `lookup/distritos.txt` (18 distritos plus Açores and Madeira), matched from the Morada; else `<i>desconhecido</i>`. The first location (4.4) |
+| 6 | Morada | text | Street address, as found. The first location (4.4) |
 | 7 | Áreas | tokens | From the fixed list in 4.1; one or more |
 | 8 | Adicional | text | Free text: anything the entity says that the fixed list does not capture |
 | 9 | Website | URL | Best effort |
-| 10 | E-mail | text | Public contact e-mail |
-| 11 | Telefone | text | International format `+<country code> <digits>`, spaces allowed (e.g. `+351 212 345 678`). Rendered as a `tel:` link; the label drops a leading `+351 ` (see section 5) |
+| 10 | E-mail | text | Public contact e-mail: the first location's own, else the first entity-level one (4.4) |
+| 11 | Telefone | text | International format `+<country code> <digits>`, spaces allowed (e.g. `+351 212 345 678`). Rendered as a `tel:` link; the label drops a leading `+351 ` (see section 5). The first location's own, else the first entity-level one (4.4) |
 
 ### 4.1 Fixed list of áreas de atuação **[CALL: list is my proposal]**
 
@@ -58,14 +58,21 @@ Rules:
 
 ### 4.2 Missing values
 
-A field the subagent could not find is written as `<i>indisponível</i>`, never left empty. Empty means "not yet researched". Exception: Áreas and Distrito use `<i>desconhecido</i>` instead (same meaning: the subagent could not determine it). Distrito and Local come only from matching the Morada against the `lookup/` lists (Local must be a name in the file of the row's Distrito; no Distrito means no Local). `scripts/check.py` enforces this. The status emoji, not the cell content, says whether research happened.
+A field the subagent could not find is written as `<i>indisponível</i>`, never left empty. Empty means "not yet researched". Exception: Áreas and Distrito use `<i>desconhecido</i>` instead (same meaning: the subagent could not determine it). Distrito and Local come only from matching the Morada against the `lookup/` lists (Local must be a name in the file of the row's Distrito; no Distrito means no Local). `scripts/check.py` enforces this, for every location in `data-loc` too. The status emoji, not the cell content, says whether research happened.
 
 ### 4.3 Status
 
 - `⬜` = nobody has researched this entity.
-- `✅` = a subagent researched it, and every field holds either a value or `<i>indisponível</i>` (Áreas: at least one slug or `<i>desconhecido</i>`; Distrito: a value or `<i>desconhecido</i>`).
+- `✅` = a subagent researched it, every location it lists, and every field holds either a value or `<i>indisponível</i>` (Áreas: at least one slug or `<i>desconhecido</i>`; Distrito: a value or `<i>desconhecido</i>`).
 - A ✅ row with all fields indisponível is valid ("searched, found nothing").
+- `🔄` = the row was ✅ and awaits re-research of all its locations (the 🔄 pass, 7.6). Its cells and `data-src` are kept and obey the same rules as a ✅ row; the page shows it like ✅ (popup on the icon, label "A rever localizações"), counts it as filled, and has no filter for it. A 🔄 row always has `data-src` (a ✅ row without sources goes back to ⬜ in the migration, 7.6). Only `refill-entity` / `refill-batch` turn a 🔄 row into ✅ (or 🔒); `fill-entity` never touches one.
 - `🔒` = the entity is clearly a private individual (a natural person, not a company, association or public body) with no public business data, so its data is deliberately not published. It counts as done: tooling never re-queries it. A 🔒 row has no `data-src`, the same Nº and Nome rules as any row, and every data cell is `<i>indisponível</i>` or `<i>desconhecido</i>` (as in an empty ✅ row). It is written by `scripts/apply_row.py` from a research JSON with `"private": true`, only when the entity is clearly a person. The page shows 🔒 as its own status ("Pessoa singular: dados não publicados"), neither pending nor filled.
+
+### 4.4 Locations
+
+An entity may work from several places. Each location holds `local`, `distrito`, `morada`, and optionally `telefone`, `email` (only when the entity's page ties them to that address) and `main` (`true` on at most one location, only when the site clearly names a head office, e.g. "Sede"). The entity may also have `telefones` / `emails`: contacts tied to no address.
+
+Locations are ordered: the `main` one first, then by Distrito rank (the order of `lookup/distritos.txt`), ties in source order. The visible cells 4, 5, 6 (Local, Distrito, Morada) hold the **first** location of that order; cells 10, 11 (E-mail, Telefone) hold its own contact, else the first entity-level one. A row with one location and at most one phone and one e-mail needs nothing more. Otherwise the full data goes in the `data-loc` attribute (section 5). `scripts/apply_row.py` is the only writer of both.
 
 ## 5. File format (the contract between orchestrator and subagents)
 
@@ -87,9 +94,11 @@ Rules:
 - Text is HTML-escaped (`&amp;`, `&lt;`). Emails and URLs stored as plain text; JS makes them links at render time. Telefone becomes `<a href="tel:+351212345678">212 345 678</a>`: the `href` is the stored number without spaces, the label drops a leading `+351 ` (non-Portuguese numbers show in full).
 - Ids are the protocol number zero-padded to **at least** 4 digits (`e0001`, `e9999`, `e10000`); never truncated. Row regex uses `e[0-9]{4,}`.
 - Áreas cell: space-separated slugs (not `;`). The UI turns them into chips and a multi-select filter, so the raw token form is never what the user sees **[CALL]**. Chosen because it is the cheapest form to edit and to match with `grep -w`.
-- Sources: a ✅ row carries `data-src="URL URL…"` on the `<tr>` (space-separated http(s) URLs, `&` escaped), written by `scripts/apply_row.py` from the research JSON's `sources`. ⬜ and 🔒 rows never have it. The page shows it as a popup on the ✅ icon.
+- Sources: a ✅ or 🔄 row carries `data-src="URL URL…"` on the `<tr>` (space-separated http(s) URLs, `&` escaped), written by `scripts/apply_row.py` from the research JSON's `sources`. ⬜ and 🔒 rows never have it. The page shows it as a popup on the ✅ / 🔄 icon. On a refill the new sources are added to the old ones.
+- Locations: a ✅ or 🔄 row with several locations, phones or e-mails carries `data-loc="…"` on the `<tr>`: HTML-escaped JSON `{"l":[{"local":…,"distrito":…,"morada":…,"telefone":…,"email":…,"main":true}],"t":["+351 …"],"e":["…"]}` (`l`: the locations in the order of 4.4, at least one; `t`, `e`: entity-level phones and e-mails). Absent on a row with one location and at most one phone and one e-mail. `scripts/check.py` requires that cells 4, 5, 6, 10, 11 equal the first location (or the first entity-level contact) and that `data-loc` is present only when needed. ⬜ and 🔒 rows never have it.
 - Subagent read: `grep '^<tr id="e0001"[ >]' index.html`.
 - Subagent write: replace that one line; touch no other line.
+- Orchestrator, refill: `grep -o '^<tr id="e[0-9]*"[^>]*><td>🔄' index.html` lists the rows awaiting re-research (the `[^>]*` allows `data-src` / `data-loc` after the id).
 - Orchestrator: `grep -m1 '^<tr id="e[0-9]*"><td>⬜' index.html` (next work), `grep -c '^<tr id="e[0-9]*"><td>⬜' index.html` (remaining). Rows flagged `data-removed="1"` have an attribute after the id, so these patterns skip them.
 
 ## 6. The page
@@ -98,17 +107,19 @@ Rules:
 All 11 columns shown. **Sortable columns: Estado, Nº, Nome, Local, Distrito, Áreas only**; the others (Morada, Adicional, Website, E-mail, Telefone) are not sortable. Header click sorts (asc/desc, toggling), numeric sort for Nº, locale-aware sort (pt) for text, first área label for Áreas. `indisponível`, `desconhecido` and empty cells sort last in both directions.
 
 ### 6.2 Filters
-- Status: All / ✅ / ⬜ / 🔒 (default: **All**).
+- Status: All / ✅ / ⬜ / 🔒 (default: **All**). 🔄 has no entry of its own and counts as ✅.
 - Filters exist **only** on Nome, Local, Áreas (plus Distrito, see below). All other columns are neither sortable nor filterable.
 - Nome: text "contains" box, accent- and case-insensitive.
 - Local: exact-match dropdown of the locais present.
 - Áreas: multi-select; **any-of** semantics only (an entity matches if it has at least one selected área). No all-of toggle.
-- Distrito: exact-match dropdown **[CALL: added, since district is the "near" mechanism; drop it if you disagree]**.
+- Distrito: exact-match dropdown; an entity matches if **any** of its locations is in that Distrito (likewise Local) **[CALL: added, since district is the "near" mechanism; drop it if you disagree]**.
 - Filters combine with AND. A "clear all" button, and a visible "N of 6,345 shown" count.
 - Filter and sort state is kept in the URL hash so a view can be shared and bookmarked.
 
-### 6.3 Near a city
-v1: "near" means same city or same district. Distrito is best effort (often `<i>desconhecido</i>`), so a district filter will miss entities with unknown district; the Local filter remains the reliable one. Distance search is **out of scope** for v1 (see 9).
+### 6.3 Near a city and locations on the page
+v1: "near" means same city or same district, for any location of the entity. Distrito is best effort (often `<i>desconhecido</i>`), so a district filter will miss entities with unknown district; the Local filter remains the reliable one. Distance search is **out of scope** for v1 (see 9).
+
+The page is district-aware. With a Local or Distrito chosen, that place's locations come first (then the rest in the order of 4.4); the row shows the first one's Local, Morada and contact, and the first phone and e-mail get a "(recomendado)" tag (with a `?` explanation) only when they belong to the chosen place's location, or, with nothing chosen, to the `main` one. Entity-level phones are ordered by their landline prefix (`lookup/prefixos.txt`, ANACOM geographic ranges) against the chosen Distrito, then by Distrito rank, then mobiles in source order. The Distrito cell reads `Lisboa`; `Lisboa, Porto, Faro +3` (first 3 districts of 2 to 8); `Por todo o país (9 distritos)`; or, with a Distrito chosen, `D (+N)`; its tooltip lists all. A row with more than one location (or extra contacts) has one expand button, "Outras localizações" ("Todas as localizações" for 9+ districts), listing every location with its own contact. CSV export has one line per entity plus a `Distritos` column; copying list e-mails copies one e-mail per entity.
 
 ### 6.4 Performance
 6,345 rows in one DOM table must stay responsive. Rendering is by filtered slice (virtual or paged, 50 rows per page) **[CALL]**; the raw rows stay in the HTML so `grep` works and the page works without JS for reading.
@@ -133,7 +144,7 @@ Visitors can group entities into named lists (e.g. "Candidaturas"). Lists are pe
 1. `grep -m1 '^<tr id="e[0-9]*"><td>⬜' index.html` → pick the next entity (or N entities for N parallel subagents).
 2. Spawn one subagent per entity, giving it only the protocol number.
 3. Subagent opens one PR. The orchestrator never edits `index.html` itself.
-4. A human reviews and merges. Nothing is merged automatically.
+4. A human reviews and merges, except batch PRs (`feat/fill-batch-*`, `feat/refill-batch-*`) that touch only `index.html`: CI merges those once the checks pass (7.6).
 
 ### 7.2 Subagent (skill to be written later)
 1. Read its line with `grep`.
@@ -149,7 +160,8 @@ Neighbouring-line PRs can conflict. A CI check (see 7.4) plus rebase resolves th
 A small script that fails the PR if:
 - any line of `index.html` other than an entity row changed, or an entity row changed other than by filling it (one PR may fill several entities, one commit each);
 - the line does not match the section 5 shape (11 cells, valid status, valid áreas slugs, or exactly `<i>desconhecido</i>` alone);
-- a ✅ row contains an empty cell;
+- a ✅ or 🔄 row contains an empty cell;
+- a row has an invalid `data-loc` (4.4, 5);
 - a 🔒 row has `data-src`, or a data cell that is not `<i>indisponível</i>` / `<i>desconhecido</i>`;
 - a URL does not start with `http://` or `https://`, an e-mail is not shaped like one, or a phone does not match `+<country code> <digits>`.
 
@@ -168,6 +180,13 @@ Command: `scripts/sync.py` (Python stdlib, no deps). The orchestrator runs it, t
 - CI check 7.4 gets a sync-PR mode: only new `⬜` rows, or `data-removed` added, nothing else.
 - Cadence: manual for v1. A scheduled run is a non-goal for now.
 
+### 7.6 Re-research (🔄) and migration **[CALL]**
+Adding locations (4.4) left every old ✅ row with one place. A one-off migration commit therefore turns every ✅ row **with** `data-src` into 🔄 (status cell only; cells and sources kept) and every ✅ row **without** `data-src` back into ⬜ with all data cells emptied; `scripts/check.py --diff` accepts exactly those two shapes (never on a batch branch). New work follows two paths, mirrored on purpose:
+
+- `fill-batch` / `fill-entity` take ⬜ rows. The subagent researches **every location** the entity lists (no cap; opening pages is not a search) and writes the JSON `locations` (+ `telefones`, `emails`, `areas`, `adicional`, `website`, `sources`); `scripts/apply_row.py` still accepts the old flat `local`/`distrito`/`morada`/`telefone`/`email` keys as one location.
+- `refill-batch` / `refill-entity` take 🔄 rows, same contract and JSON. The subagent reads the row and its `data-src` / `data-loc`, opens the sources first and follows them to the entity's locations page; it searches only when they lead nowhere. Existing values stay unless a page contradicts them; a dead link or an unconfirmed value is not a contradiction. A field emptied on purpose is named in the JSON's `cleared` list with the reason in the report, otherwise `apply_row.py` keeps the old value. Row goes 🔄 → ✅ (or 🔒). `refill-batch` applies with `scripts/apply_batch.py --refill` (commit `feat(data): refill eID`), one commit per entity, one PR on `feat/refill-batch-<stamp>`.
+- Both kinds of batch PR (`feat/fill-batch-*`, `feat/refill-batch-*`) may only touch `index.html` and merge themselves once the CI checks pass. 🔄 rows are the queue, so a refill is resumable.
+
 ## 8. Quality
 
 - `scripts/sync.py` is deterministic: running it twice yields byte-identical output.
@@ -181,7 +200,7 @@ Command: `scripts/sync.py` (Python stdlib, no deps). The orchestrator runs it, t
 - Distance or map search ("near city").
 - Vacancy tracking, application status, or notifications.
 - Editing from the page.
-- Re-verifying already ✅ entities; a staleness mechanism.
+- Re-verifying ✅ entities beyond the one-off 🔄 pass (7.6); a staleness mechanism.
 - Scraping behind logins or contacting entities.
 
 ## 10. Resolved questions

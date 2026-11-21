@@ -19,7 +19,7 @@ grep '^<tr id="eID"[ >]' REPO/index.html
 
 - No output: before concluding the row is missing, check you kept the `e` prefix and the full zero-padded number, and run it once more. Still nothing: the id does not exist or is flagged `data-removed`. Stop, report it.
 - Second cell is `🔒`: already marked private individual. Stop, report it.
-- Second cell is `✅`: already filled. Stop, report it. Exception, a refill: Website and Telefone are both `<i>indisponível</i>`. Then go on, and treat the existing cells as leads, not facts: keep a value only if a page you open confirms it.
+- Second cell is `✅`: already filled. Stop, report it. A `🔄` row (pending re-research) is not yours either: it belongs to `refill-entity`. Stop, report it.
 - Otherwise the third `<td>` is the Nome. Copy it exactly. Never change it.
 
 ## 2. Research
@@ -36,22 +36,34 @@ The search tool is US-only. A bare Portuguese name returns Brazilian pages and P
 
 Prefer the entity's own website; then official directories (SNS, Carta Social, câmara municipal). Open pages to read them. Do not guess from memory.
 
-Collect, using only what a page states:
+Collect, using only what a page states. An entity may work from several places: research **every location** it lists (its "onde estamos", "contactos" or "delegações" page), no cap. Opening pages is not a search; the budget below is unchanged.
+
+Per location:
 
 | Cell | Value | If not found |
 |---|---|---|
-| Local | one name copied exactly from the Distrito's lookup file (see "Distrito and Local" below) | `<i>indisponível</i>` |
-| Distrito | one name from `REPO/lookup/distritos.txt` | `<i>desconhecido</i>` |
-| Morada | street address as written | `<i>indisponível</i>` |
+| Local | one name copied exactly from the Distrito's lookup file (see "Distrito and Local" below) | `null` |
+| Distrito | one name from `REPO/lookup/distritos.txt` | `null` |
+| Morada | street address as written | `null` |
+| Telefone | `+351 212 345 678` style: `+`, country code, space, digits and spaces; only if the page ties it to this address | `null` |
+| E-mail | one public e-mail; only if the page ties it to this address | `null` |
+| main | `true` only when the site clearly names this one the head office ("Sede", "Sede nacional"); at most one location | leave out |
+
+For the entity as a whole:
+
+| Cell | Value | If not found |
+|---|---|---|
+| Telefones | phones not tied to any address (e.g. a "Contactos" page listing several numbers), same format | `[]` |
+| E-mails | e-mails not tied to any address | `[]` |
 | Áreas | space-separated slugs from the list below, no duplicates | `<i>desconhecido</i>` (alone) |
 | Adicional | short free text the slugs do not cover (e.g. "Intervenção precoce") | `<i>indisponível</i>` |
 | Website | starts with `http://` or `https://` | `<i>indisponível</i>` |
-| E-mail | one public contact e-mail | `<i>indisponível</i>` |
-| Telefone | `+351 212 345 678` style: `+`, country code, space, digits and spaces | `<i>indisponível</i>` |
+
+An entity with one place gives one location. A phone or e-mail the page does not tie to an address goes in `telefones` / `emails`, not on a location.
 
 ### Distrito and Local
 
-Use the Morada you collected (never the entity's name or memory), and the lists in `REPO/lookup/`:
+Do this once per location. Use that location's Morada (never the entity's name or memory), and the lists in `REPO/lookup/`:
 
 1. Read `REPO/lookup/distritos.txt` (20 names: the 18 distritos plus Açores and Madeira). Pick the Distrito the Morada is in. Not sure, or no Morada: Distrito `null`, Local `null`.
 2. Read the whole file `REPO/lookup/<Distrito>.txt` (e.g. `lookup/Setúbal.txt`) and pick the name the Morada is in. Copy it exactly as written there.
@@ -72,21 +84,24 @@ Write `OUT/eID.json` with the Write tool. Plain values, no HTML, no escaping, no
 
 ```json
 {
-  "local": "Cascais",
-  "distrito": "Lisboa",
-  "morada": "Rua X 12, 2750-000 Cascais",
-  "areas": ["clinica", "educacao"],
-  "adicional": "Intervenção precoce",
-  "website": "https://example.pt",
-  "email": "geral@example.pt",
-  "telefone": "+351 212 345 678",
-  "sources": ["https://example.pt/contactos"]
+  "locations": [
+    {"local": "Lisboa", "distrito": "Lisboa", "morada": "Rua José Estêvão, 135 A, 1150-201 Lisboa", "telefone": "+351 213 587 900", "email": "apav.sede@apav.pt", "main": true},
+    {"local": "Porto", "distrito": "Porto", "morada": "Rua X 12, 4000-000 Porto"}
+  ],
+  "telefones": ["+351 210 000 000"],
+  "emails": ["geral@apav.pt"],
+  "areas": ["justica"],
+  "adicional": "Apoio a vítimas de crime",
+  "website": "https://www.apav.pt",
+  "sources": ["https://www.apav.pt/apav_v3/index.php/pt/contactos"]
 }
 ```
 
 - A value you did not find on a page: `null` (or leave the key out). Never guess.
+- `locations`: one entry per place the entity lists, in any order (`apply_row.py` orders them: `main` first, then by Distrito). Each entry holds only the keys of the per-location table; `main` is `true` or left out. A single-place entity has one entry. `[]` if you found no location.
+- `telefones`, `emails`: lists of contacts not tied to an address; `[]` if none.
 - `areas`: slugs from the list above only, no duplicates; `[]` if none fit.
-- `sources`: every page you took a value from, as full `http(s)` URLs; `[]` if you found nothing. They are shown on the site in a popup on the ✅ icon.
+- `sources`: every page (locations page included) you took a value from, as full `http(s)` URLs; `[]` if you found nothing. They are shown on the site in a popup on the ✅ icon.
 - Private individual (🔒): write only `{"private": true}`. `apply_row.py` then writes a 🔒 row with every data cell a placeholder and no `data-src`; any other keys are ignored.
 - Fields still follow the formats in the table (URL starts with `http(s)://`, phone `+351 212 345 678` style).
 

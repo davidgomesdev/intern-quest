@@ -10,7 +10,7 @@ Two phases. Subagents (running `fill-entity`) only research and write `OUT/eID.j
 ## 1. Build the id list
 
 Given ids: zero-pad each to at least 4 digits (`7` → `0007`).
-Given a count N instead: take the first N unfilled rows.
+Given a count N instead: take the first N unfilled (⬜) rows.
 
 ```bash
 grep -o '^<tr id="e[0-9]*"><td>⬜' index.html | head -N | grep -o '[0-9]\{4,\}'
@@ -28,7 +28,7 @@ grep -o '^<tr id="e[0-9]*"><td>⬜' index.html | sort -R | head -5 | grep -o '[0
 grep '^<tr id="eID"[ >]' index.html | cut -c1-80
 ```
 
-Drop, and report why, any id that has no match (unknown or `data-removed`) or is already `✅` or `🔒` (the first 80 chars show it; both are done and never re-queried). Adjacent rows are fine: commits are applied one after another on one branch.
+Drop, and report why, any id that has no match (unknown or `data-removed`) or is already `✅`, `🔄` or `🔒` (the first 80 chars show it; ✅ and 🔒 are done and never re-queried, 🔄 waits for `refill-batch`). Adjacent rows are fine: commits are applied one after another on one branch.
 
 ## 3. Research (parallel)
 

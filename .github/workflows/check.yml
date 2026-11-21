@@ -14,8 +14,8 @@ jobs:
         run: scripts/check.py --diff "origin/$BASE" --branch "$HEAD"
       - run: scripts/test.py
   scope:
-    # Fill-batch PRs may only touch index.html.
-    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'feat/fill-batch-')
+    # Fill- and refill-batch PRs may only touch index.html.
+    if: github.event_name == 'pull_request' && (startsWith(github.head_ref, 'feat/fill-batch-') || startsWith(github.head_ref, 'feat/refill-batch-'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -23,14 +23,14 @@ jobs:
       - env: { BASE: "${{ github.base_ref }}" }
         run: |
           extra=$(git diff --name-only "origin/$BASE...HEAD" | grep -vx 'index.html' || true)
-          if [ -n "$extra" ]; then echo "fill-batch PR changes files besides index.html:"; echo "$extra"; exit 1; fi
+          if [ -n "$extra" ]; then echo "batch PR changes files besides index.html:"; echo "$extra"; exit 1; fi
   merge:
-    # Fill-batch PRs only: merge once `check` and `scope` have passed. The agent never merges.
+    # Fill- and refill-batch PRs only: merge once `check` and `scope` have passed. The agent never merges.
     needs: [check, scope]
     if: >
       github.event_name == 'pull_request' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
-      startsWith(github.head_ref, 'feat/fill-batch-') &&
+      (startsWith(github.head_ref, 'feat/fill-batch-') || startsWith(github.head_ref, 'feat/refill-batch-')) &&
       github.event.pull_request.user.login == github.repository_owner
     runs-on: ubuntu-latest
     permissions: { contents: write, pull-requests: write }

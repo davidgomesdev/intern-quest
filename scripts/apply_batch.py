@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Apply researched rows, one commit per entity. Run from the batch worktree.
 
-Usage: scripts/apply_batch.py OUT ID[:reason] ...
+Usage: scripts/apply_batch.py [--refill] OUT ID[:reason] ...
   ID          apply OUT/eID.json (flags merged into adicional), check, commit "feat(data): fill eID"
+  --refill    the rows are 🔄: commit "feat(data): refill eID" instead
   ID:reason   subagent already failed; recorded as FAILED, nothing applied
 
 Prints one line per id ("eID ok" / "eID private" / "eID FAILED: reason") and writes
@@ -34,7 +35,7 @@ def nome(rid, text):
     return cells[2] if len(cells) > 2 else '—'
 
 
-def fill(rid, out):
+def fill(rid, out, verb='fill'):
     """Apply and commit one entity; return None on success or a failure reason."""
     f = out / f'{rid}.json'
     if not f.exists():
@@ -54,7 +55,7 @@ def fill(rid, out):
     if rc:
         return f'check.py: {msg}'
     run('git', 'add', 'index.html')
-    rc, msg = run('git', 'commit', '-m', f'feat(data): fill {rid}')
+    rc, msg = run('git', 'commit', '-m', f'feat(data): {verb} {rid}')
     if rc:
         print(f'ABORT {rid}: commit failed: {msg}', file=sys.stderr)
         sys.exit(3)
@@ -66,6 +67,8 @@ def fill(rid, out):
 
 
 def main(argv):
+    verb = 'refill' if '--refill' in argv else 'fill'
+    argv = [a for a in argv if a != '--refill']
     if len(argv) < 3:
         print(__doc__, file=sys.stderr)
         return 2
@@ -75,7 +78,7 @@ def main(argv):
         rid, _, pre = arg.partition(':')
         rid = 'e' + rid.lstrip('e')
         n = nome(rid, html)
-        why = pre or fill(rid, out)
+        why = pre or fill(rid, out, verb)
         if why:
             run('git', 'reset', '--hard', 'HEAD')
             line, res = f'- {rid} ({n}): FAILED: {why}', f'FAILED: {why}'

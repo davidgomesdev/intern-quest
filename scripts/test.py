@@ -252,8 +252,23 @@ def test_check_diff():
     assert cd(diff((r1, f1), extra=[("<p>a</p>", "<p>b</p>")]), html, None)
     assert cd(diff((r1, f1)), ["index.html", "app.js"], None)
     assert cd(diff((r1, filled(c3="")), ), html, None)  # invalid filled row
+    # migration to 🔄 / ⬜ (not on batch branches) and refills
+    done = row(FILLED_CELLS, attr=' data-src="https://x.pt"')
+    pend = done.replace("<td>✅</td>", "<td>🔄</td>", 1)
+    bare = row(FILLED_CELLS)
+    zero = row(["⬜", "0001", FILLED_CELLS[2]] + [""] * 8)
+    assert cd(diff((done, pend)), html, "chore/migrate-locations") == []
+    assert cd(diff((bare, zero)), html, "chore/migrate-locations") == []
+    assert cd(diff((done, pend)), html, "feat/fill-batch-20261121")  # not on batch branches
+    assert cd(diff((done, zero)), html, "x")  # has data-src: may not go ⬜
+    assert cd(diff((pend, done.replace("Cascais", "Sintra"))), html, "feat/refill-batch-1") == []
+    loc2 = {**LOC2, "l": [LOC2["l"][0], {**LOC2["l"][1], "morada": "Rua Q 2"}]}
+    assert cd(diff((loc_row(LOC2, "🔄"), loc_row(loc2))), html, "feat/refill-batch-1") == []  # only data-loc differs
+    assert cd(diff((done, pend.replace("Cascais", "Sintra"))), html, "chore/migrate-locations")  # more than the status changed
+    assert cd(diff((bare, zero.replace("<td></td>", "<td>x</td>", 1))), html, "chore/migrate-locations")
     # sync mode
     assert cd(diff((None, r2)), html, None) == []
+    assert cd(diff((loc_row(LOC2), loc_row(loc2))), html, None)  # a sync may not touch data-loc
     assert cd(diff((r1, R("0001", attr=' data-removed="1"'))), html, None) == []
     assert cd(diff((R("0001", attr=' data-removed="1"'), r1)), html, None) == []
     assert cd(diff((None, f2)), html, None)
@@ -355,6 +370,16 @@ def test_apply_batch():
         assert "Revisar: duvida" in open(os.path.join(d, "index.html"), encoding="utf-8").read()
         body = open(os.path.join(out, "body.md"), encoding="utf-8").read()
         assert "- e0001 (Nome 0001): ok, https://a.pt/x" in body and "- e0002 (Nome 0002): FAILED: no search" in body, body
+        # refill: a 🔄 row, commit subject says refill, PR heading unchanged
+        p = os.path.join(d, "index.html")
+        text = open(p, encoding="utf-8").read()
+        open(p, "w", encoding="utf-8").write(text.replace("<td>✅</td>", "<td>🔄</td>", 1))
+        g("commit", "-qam", "pend")
+        r = subprocess.run([sys.executable, os.path.join(HERE, "apply_batch.py"), "--refill", out, "0001"],
+                           cwd=d, capture_output=True, text=True)
+        assert r.returncode == 0 and r.stdout.startswith("e0001 ok"), r.stdout + r.stderr
+        assert g("log", "-1", "--format=%s").strip() == "feat(data): refill e0001"
+        assert open(os.path.join(out, "body.md"), encoding="utf-8").read().startswith("## Entities\n")
     finally:
         shutil.rmtree(d)
 

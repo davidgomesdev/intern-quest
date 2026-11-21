@@ -412,6 +412,7 @@ function download(name, text, type) {
 }
 
 const ACT = { // every [data-act] button
+  ajuda: b => { const h = $('#ajuda'); h.hidden = !h.hidden; b.setAttribute('aria-expanded', !h.hidden); if (!h.hidden) b.closest('details').open = true; }, // the ? next to the backup title
   tab: b => { S.l = b.dataset.l; S.p = 1; update(); },
   new: () => { const k = addList(prompt('Nome da nova lista')); if (k) { S.l = k; S.p = 1; update(); } },
   pick: b => { PICK = PICK === b.dataset.r ? '' : b.dataset.r; update(); $('.lst-menu input')?.focus(); }, // second click on the same ★ closes it

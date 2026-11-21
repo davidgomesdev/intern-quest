@@ -3,6 +3,7 @@
 import concurrent.futures, contextlib, html, json, os, re, shutil, subprocess, sys, tempfile, threading, traceback, unicodedata
 
 sys.dont_write_bytecode = True
+from urllib.parse import quote, unquote
 from importlib.machinery import SourceFileLoader
 from importlib.util import module_from_spec, spec_from_loader
 
@@ -468,7 +469,7 @@ addEventListener('load', async () => {
   try {
   %BODY%
   } catch (e) { out.error = String(e); }
-  out.stored = localStorage.getItem('iq-lists'); out.hash = location.hash;
+  out.stored = localStorage.getItem('iq-lists'); out.status = localStorage.getItem('iq-status'); out.hash = location.hash;
   localStorage.clear();
   finish({out});
 });</script>"""
@@ -670,10 +671,18 @@ scenario("share", """out.banner = $('#partilha').textContent; out.shown = !$('#p
   $('[data-act=shsave]').click(); out.gone = $('#partilha').hidden;""", "share=Amigos%3A0001,0003,9999,xx,0003")
 scenario("shskip", "$('[data-act=shskip]').click();", "share=Amigos%3A0001")
 scenario("garbage", "out.shown = !$('#partilha').hidden;", "share=garbage")
-scenario("backup", """$('[data-act=exp]').click(); out.backup = out.blob; out.file2 = out.file;
-  const dt = new DataTransfer(); dt.items.add(new File([JSON.stringify([['Importada', [['e0001', 'x'], ['bad', 'y']]], ['Favoritas', [['e0003', '']]]])], 'l.json'));
+IMPORT = """const dt = new DataTransfer(); dt.items.add(new File([JSON.stringify(%FILE%)], 'l.json'));
   $('#imp-f').files = dt.files; $('#imp-f').dispatchEvent(new Event('change'));
-  for (let i = 0; i < 40 && !out.alert; i++) await tick();  // reading the file takes real time, not virtual""")
+  for (let i = 0; i < 40 && !out.alert; i++) await tick();  // reading the file takes real time, not virtual"""
+scenario("backup", """SAVED.e0001 = {s: 'visto', t: 1000}; SAVED.e0002 = {s: 'email', t: 5000};
+  $('[data-act=exp]').click(); out.backup = out.blob; out.file2 = out.file;
+  """ + IMPORT.replace("%FILE%", """{listas: [['Importada', [['e0001', 'x'], ['bad', 'y']]], ['Favoritas', [['e0003', '']]]],
+    estados: {e0001: {s: 'email', t: 2000}, e0002: {s: 'visto', t: 4000}, e0003: {s: 'nope', t: 1}, bad: {s: 'visto', t: 1}}}"""))  # newer wins; old, bad status and bad id dropped
+scenario("backupold", IMPORT.replace("%FILE%", "[['Importada', [['e0001', 'x']]]]"))  # the old lists-only file still imports
+scenario("link", """SAVED.e0001 = {s: 'visto', t: 1000}; $('[data-act=lnk]').click(); out.link = out.copied;""")
+scenario("toobig", """for (let i = 0; i < 400; i++) SAVED['e' + (1000 + i)] = {s: 'visto', t: 1000 + i};
+  $('[data-act=lnk]').click(); out.copied2 = out.copied;""")
+scenario("linked", "out.hash0 = location.hash;", "copia=" + quote(json.dumps({"listas": [["Recebida", [["e0001", "n"]]]], "estados": {"e0003": {"s": "visto", "t": 7}}})))
 scenario("badfile", """const dt = new DataTransfer(); dt.items.add(new File(['{nope'], 'l.json'));
   $('#imp-f').files = dt.files; $('#imp-f').dispatchEvent(new Event('change'));
   for (let i = 0; i < 40 && !out.alert; i++) await tick();  // reading the file takes real time, not virtual""")
@@ -947,9 +956,19 @@ def _part_lists_b():
     assert R.lists("garbage")[1]["shown"] is False
 
     dom, out = R.lists("backup")
-    assert out["file2"] == "abre-portas-listas.json" and json.loads(out["backup"]) == [FAV, ["Vazia", []]]
-    assert out["alert"] == "Listas importadas."
+    assert out["file2"] == "abre-portas-copia.json"
+    assert json.loads(out["backup"]) == {"listas": [FAV, ["Vazia", []]], "estados": {"e0001": {"s": "visto", "t": 1000}, "e0002": {"s": "email", "t": 5000}}}
+    assert out["alert"] == "Cópia importada."
     assert stored(out) == [["Favoritas", FAV[1] + [["e0003", ""]]], ["Vazia", []], ["Importada", [["e0001", "x"]]]]
+    assert json.loads(out["status"]) == {"e0001": {"s": "email", "t": 2000}, "e0002": {"s": "email", "t": 5000}}
+    dom, out = R.lists("backupold")
+    assert out["alert"] == "Cópia importada." and stored(out)[-1] == ["Importada", [["e0001", "x"]]]
+    dom, out = R.lists("link")
+    assert "#copia=" in out["link"] and json.loads(unquote(out["link"].split("#copia=")[1])) == {"listas": [FAV, ["Vazia", []]], "estados": {"e0001": {"s": "visto", "t": 1000}}}
+    dom, out = R.lists("toobig")
+    assert out["alert"].startswith("Há dados a mais") and "Exportar cópia" in out["alert"] and "copied2" not in out
+    dom, out = R.lists("linked")
+    assert out["hash0"] == "" and stored(out)[-1] == ["Recebida", [["e0001", "n"]]] and json.loads(out["status"]) == {"e0003": {"s": "visto", "t": 7}}
     dom, out = R.lists("badfile")
     assert out["alert"].startswith("Ficheiro inválido") and stored(out) == [FAV, ["Vazia", []]]
 

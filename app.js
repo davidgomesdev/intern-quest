@@ -32,6 +32,7 @@ function mergeLists(data) { // data has the ser() shape; throws if it does not
   }
 }
 try { mergeLists(JSON.parse(localStorage.getItem('iq-lists') || '[]')); } catch { /* no storage or corrupt: keep what parsed */ }
+const LINK_MAX = 8000; // chars: chat apps and servers start cutting URLs around here
 const backup = () => ({ listas: ser(), estados: SAVED }); // the backup file / link payload
 function mergeBackup(d) { // lists merge by name; per entity the newest status wins. An array is the old lists-only file.
   mergeLists(Array.isArray(d) ? d : d.listas);
@@ -455,7 +456,11 @@ const ACT = { // every [data-act] button
   shskip: () => { SHARE = null; update(); },
   exp: () => download('abre-portas-copia.json', JSON.stringify(backup()), 'application/json'),
   imp: () => $('#imp-f').click(),
-  lnk: b => copy(b, location.href.replace(/#.*/, '') + '#copia=' + encodeURIComponent(JSON.stringify(backup()))),
+  lnk: b => {
+    const url = location.href.replace(/#.*/, '') + '#copia=' + encodeURIComponent(JSON.stringify(backup()));
+    if (url.length > LINK_MAX) alert('Há dados a mais para caber num link. Usa "Exportar cópia" e "Importar cópia" no outro dispositivo.');
+    else copy(b, url);
+  },
 };
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]');

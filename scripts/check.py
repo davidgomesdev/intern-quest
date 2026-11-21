@@ -81,8 +81,8 @@ def _esc(s):
 
 
 def visible(data):
-    """The cells [Local, Distrito, Morada, E-mail, Telefone] the row shows for its first location."""
-    first = data['l'][0]
+    """The cells [Local, Distrito, Morada, E-mail, Telefone] the row shows for its first location (placeholders if none)."""
+    first = data['l'][0] if data['l'] else {}
     def cell(v, none=IND):
         return _esc(v) if v else none
     emails, phones = data.get('e') or [None], data.get('t') or [None]
@@ -102,8 +102,8 @@ def _loc_errs(raw, cells):
         d = json.loads(html.unescape(raw))
     except ValueError:
         return ['data-loc: not valid JSON']
-    if not (isinstance(d, dict) and set(d) == {'l', 't', 'e'} and all(isinstance(d[k], list) for k in d) and d['l']):
-        return ['data-loc: must be {"l": [location...], "t": [...], "e": [...]} with at least one location']
+    if not (isinstance(d, dict) and set(d) == {'l', 't', 'e'} and all(isinstance(d[k], list) for k in d) and (d['l'] or d['t'] or d['e'])):
+        return ['data-loc: must be {"l": [location...], "t": [...], "e": [...]} with at least one location, phone or e-mail']
     errs = []
     for k, rx in (('t', PHONE), ('e', EMAIL)):
         if not all(isinstance(x, str) and rx.fullmatch(x) for x in d[k]):

@@ -51,7 +51,8 @@ def _old_state(old, cells):
     m = check.LOC_ATTR.search(old[:old.index('>')])
     if m:
         data = json.loads(html.unescape(m.group(1)))
-        return data['l'], data['t'], data['e']
+        on = lambda k: [x[k] for x in data['l'] if k in x]
+        return data['l'], _strs(on('telefone') + data['t']), _strs(on('email') + data['e'])
     cell = lambda i: None if cells[i] in (IND, DESC) else html.unescape(cells[i])
     loc = _loc({'local': cell(3), 'distrito': cell(4), 'morada': cell(5)})
     return ([loc] if loc else []), _strs([cell(10)]), _strs([cell(9)])
@@ -76,7 +77,10 @@ def build(old, d):
     locs = []
     for x in raw:
         x = _loc(x)
-        if x and x not in locs:
+        twin = [y for y in locs if {k: v for k, v in y.items() if k != 'main'} == {k: v for k, v in x.items() if k != 'main'}]
+        if twin:
+            twin[0].update({k: v for k, v in x.items() if k == 'main'})
+        elif x:
             locs.append(x)
     phones = _strs((d.get('telefones') or []) + [d.get('telefone')])
     emails = _strs((d.get('emails') or []) + [d.get('email')])

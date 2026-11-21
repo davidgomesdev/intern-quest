@@ -263,7 +263,7 @@ function contactCell(td, r, kind) { // the first contact, tagged when it is the 
   const v = contacts(r, kind)[0], f = shown(r)[0];
   if (!v) return td.replaceChildren(ph('indisponível'));
   td.replaceChildren(kind === 'email' ? mailTo(v) : telTo(v));
-  if (v !== f[kind] || rec(r) !== f) return;
+  if (uniq([...r.locs.map(l => l[kind]), ...(kind === 'email' ? r.mails : r.tels)]).length < 2 || v !== f[kind] || rec(r) !== f) return; // only tag when the entity has a choice of this kind
   const h = el('i', 'help', '?'); h.setAttribute('role', 'button'); h.tabIndex = 0; h.setAttribute('aria-label', 'O que é isto?');
   h.dataset.tip = S.c || S.d ? 'É o contacto da localização no distrito selecionado.' : 'É o contacto da sede da entidade.';
   td.append(' ', el('span', 'rec', '(recomendado)'), h);

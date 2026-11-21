@@ -52,7 +52,7 @@ function bizDays(t) { // Mon-Fri days from the day after t up to today
 }
 const stOf = r => (Object.hasOwn(STATUS, SAVED[r.id]?.s) ? SAVED[r.id].s : 'ver');
 const KEY = { // sortable column -> value; null = missing, sorts last in both directions
-  estado: r => (r.ok ? 2 : +r.priv), n: r => r.n, nome: r => r.nome, local: r => r.local, distrito: r => r.distrito,
+  estado: r => (r.ok ? 2 : +r.priv), n: r => r.n, nome: r => r.nome, local: r => r.locs[0].local, distrito: r => r.locs[0].distrito,
   areas: r => (r.areas[0] && r.areas[0] !== 'desconhecido' ? AREAS[r.areas[0]][1] : null),
 };
 const COLL = new Intl.Collator('pt', { sensitivity: 'base', numeric: true });
@@ -60,6 +60,7 @@ const $ = s => document.querySelector(s);
 const form = $('#filters'), tbody = $('#rows');
 let ROWS = [], BYID = new Map(), TOTAL = 0, S;
 const LOC = {}; // distrito -> Set of locais (from lookup/, embedded in index.html): Local only lists the chosen distrito's
+const RANK = {}, PX = {}; // distrito -> rank (key order of the lookup); phone prefix -> distritos
 
 const norm = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();
 const defaults = () => ({ nome: '', c: '', d: '', a: [], st: [], l: '', estado: 'ok', vazias: false, contacto: false, ord: 'n', dir: 'asc', p: 1, pp: PP });
@@ -69,27 +70,33 @@ function parse() {
   ROWS = Array.from(tbody.rows, el => {
     const c = el.cells, miss = td => !td.textContent || td.firstElementChild?.tagName === 'I';
     const val = i => (miss(c[i]) ? null : c[i].textContent);
+    let data = {};
+    try { data = JSON.parse(el.dataset.loc || '{}'); } catch { /* bad data-loc: fall back to the cells */ }
+    const locs = data.l?.length ? data.l.map(x => ({ local: x.local ?? null, distrito: x.distrito ?? null, morada: x.morada ?? null,
+      telefone: x.telefone ?? null, email: x.email ?? null, main: !!x.main }))
+      : [{ local: val(3), distrito: val(4), morada: val(5), telefone: val(10), email: val(9), main: false }];
+    const dists = [...new Set(locs.map(l => l.distrito).filter(Boolean))];
     const areas = miss(c[6]) ? (c[6].firstElementChild ? ['desconhecido'] : []) : c[6].textContent.split(' ');
-    return { el, id: el.id, n: +c[1].textContent, ok: c[0].textContent === '✅', priv: c[0].textContent === '🔒', removed: 'removed' in el.dataset,
+    return { el, id: el.id, n: +c[1].textContent, ok: ['✅', '🔄'].includes(c[0].textContent), pend: c[0].textContent === '🔄', priv: c[0].textContent === '🔒', removed: 'removed' in el.dataset,
       empty: Array.from(c).slice(3, 11).every(miss),
-      nome: c[2].textContent, local: val(3), distrito: val(4), dUnk: !!c[4].firstElementChild, areas,
+      nome: c[2].textContent, locs, tels: data.t || [], mails: data.e || [], dists, dUnk: !dists.length && !!c[4].firstElementChild, areas,
       kNome: norm(c[2].textContent), contacto: !!(val(8) || val(9) || val(10)), done: false,
-      morada: val(5), site: val(8), email: val(9), tel: val(10) }; // raw text, kept for list exports
+      site: val(8) }; // raw text, kept for list exports
   });
   BYID = new Map(ROWS.map(r => [r.id, r]));
   TOTAL = ROWS.filter(r => !r.removed).length;
 }
 
 function buildOptions() {
-  const distinct = k => [...new Set(ROWS.map(r => r[k]).filter(Boolean))].sort(COLL.compare);
-  for (const [d, ls] of Object.entries(JSON.parse($('#lookup').textContent))) LOC[d] = new Set(ls);
-  form.elements.d.options[1].before(...distinct('distrito').map(v => new Option(v)));
+  for (const [d, ls] of Object.entries(JSON.parse($('#lookup').textContent))) { RANK[d] = Object.keys(LOC).length; LOC[d] = new Set(ls); }
+  Object.assign(PX, JSON.parse($('#prefixos').textContent));
+  form.elements.d.options[1].before(...[...new Set(ROWS.flatMap(r => r.dists))].sort(COLL.compare).map(v => new Option(v)));
 }
 
 function fillLocais(d) { // Local depends on Distrito
   const c = form.elements.c;
   c.length = 1; c.disabled = !d; c.options[0].text = d ? 'Todos' : 'Escolhe o distrito';
-  const n = {}; ROWS.forEach(r => { if (!r.removed && r.local) n[r.local] = (n[r.local] || 0) + 1; });
+  const n = {}; ROWS.forEach(r => { if (!r.removed) new Set(r.locs.map(l => l.local).filter(Boolean)).forEach(v => { n[v] = (n[v] || 0) + 1; }); }); // a row counts once per Local
   c.append(...[...(LOC[d] || [])].sort(COLL.compare).map(v => new Option(`${v} (${n[v] || 0})`, v)));
 }
 
@@ -132,9 +139,38 @@ function fromForm() {
     st: Array.from(form.querySelectorAll('[name=st]:checked'), i => i.value), p: 1 });
 }
 
+const inD = l => l.distrito === S.d || !!LOC[S.d]?.has(l.local); // the location is in the chosen Distrito (a Local in the lookup counts even if its Distrito is missing)
+const uniq = a => [...new Set(a.filter(Boolean))];
+function shown(r) { // r.locs with the chosen Local first, then the chosen Distrito, then the rest (stable)
+  const rank = l => (S.c && l.local === S.c ? 0 : S.d && inD(l) ? 1 : 2);
+  return r.locs.map((l, i) => [l, i]).sort((x, y) => rank(x[0]) - rank(y[0]) || x[1] - y[1]).map(x => x[0]);
+}
+function rec(r) { // the location the "(recomendado)" tag is about: the one for the chosen Local / Distrito, else the head office
+  const f = shown(r)[0];
+  if (S.c || S.d) return (S.c && f.local === S.c) || (S.d && inD(f)) ? f : null;
+  return f.main ? f : null;
+}
+function prefixDists(t) { // the distritos of a landline's prefix (21 / 22 are two digits, the rest three), or null
+  const n = t.replace(/\D/g, '').replace(/^351/, '');
+  return /^2\d{8}$/.test(n) ? PX[/^2[12]/.test(n) ? n.slice(0, 2) : n.slice(0, 3)] || null : null;
+}
+function contacts(r, kind) { // phones / e-mails in the order of SPEC §4: the shown location's own first
+  const f = shown(r)[0], own = f[kind];
+  if (kind === 'email') return uniq([own, ...r.mails]);
+  const D = S.d || f.distrito, land = [], rest = [];
+  for (const t of uniq(r.tels)) if (t !== own) { const ds = prefixDists(t); (ds ? land : rest).push([t, ds]); }
+  const key = ds => (ds.includes(D) ? -1 : Math.min(...ds.map(d => RANK[d] ?? 99)));
+  return uniq([own, ...land.sort((a, b) => key(a[1]) - key(b[1])).map(x => x[0]), ...rest.map(x => x[0])]);
+}
+function distLabel(r) { // '' when the row has no Distrito
+  const n = r.dists.length;
+  if (S.d && S.d !== 'desconhecido') { const o = r.dists.filter(d => d !== S.d).length; return o ? `${S.d} (+${o})` : S.d; }
+  return n >= 9 ? `Por todo o país (${n} distritos)` : n > 3 ? `${r.dists.slice(0, 3).join(', ')} +${n - 3}` : r.dists.join(', ');
+}
+
 function matches(r, q) {
-  return r.kNome.includes(q.nome) && (S.c ? r.local === S.c // a chosen Local wins: its row may lack a Distrito (scrape failure)
-      : !S.d || (S.d === 'desconhecido' ? r.dUnk : r.distrito === S.d || !!LOC[S.d]?.has(r.local)))
+  return r.kNome.includes(q.nome) && (S.c ? r.locs.some(l => l.local === S.c) // a chosen Local wins: its row may lack a Distrito (scrape failure)
+      : !S.d || (S.d === 'desconhecido' ? r.dUnk : r.locs.some(inD)))
     && (!S.st.length || S.st.includes(stOf(r)))
     && (!S.a.length || S.a.some(a => r.areas.includes(a)))
     && (S.l ? LST.get(S.l).has(r.id) // inside a list every member shows, filled or not
@@ -176,11 +212,11 @@ function enhance(r) {
   r.el.setAttribute('role', 'row');
   for (const td of c) td.setAttribute('role', 'cell');
   const st = el('span', r.ok || r.priv ? 'st' : 'st st-todo', c[0].textContent),
-    label = r.ok ? 'Preenchido' : r.priv ? 'Pessoa singular: dados não publicados' : 'Por preencher';
+    label = r.pend ? 'A rever localizações' : r.ok ? 'Preenchido' : r.priv ? 'Pessoa singular: dados não publicados' : 'Por preencher';
   st.setAttribute('role', 'img'); st.setAttribute('aria-label', label); st.title = label;
   const src = r.el.dataset.src;
   if (src) { // sources popup: <details> gives click/tap/keyboard for free
-    st.title = 'Preenchido · ver fontes';
+    st.title = label + ' · ver fontes';
     const d = el('details', 'src'), sm = el('summary'), box = el('div', 'src-box');
     sm.append(st, el('span', 'vh', ' Fontes'));
     box.append(el('strong', null, 'Fontes'), ...src.split(' ').map(u => link(u, u.replace(/^https?:\/\/(www\.)?/, ''), true)));
@@ -189,10 +225,6 @@ function enhance(r) {
   if (r.priv) { // ? next to the lock: press to explain (see the tooltip handler at the bottom)
     const h = el('i', 'help', '?'); h.setAttribute('role', 'button'); h.tabIndex = 0; h.setAttribute('aria-label', 'O que é isto?');
     c[0].append(h);
-  }
-  if (r.local && r.distrito && !LOC[r.distrito]?.has(r.local)) { // Local belongs to another Distrito
-    const home = Object.keys(LOC).filter(d => LOC[d].has(r.local));
-    if (home.length) c[4].append(el('span', 'conf', `⚠ ${r.local} fica em ${home.join(' ou ')}, não em ${r.distrito}`));
   }
   if (has(c[6])) {
     const w = el('span', 'areas');
@@ -203,8 +235,6 @@ function enhance(r) {
     c[6].replaceChildren(w);
   }
   if (has(c[8])) site(c[8]);
-  if (has(c[9])) c[9].replaceChildren(link('mailto:' + c[9].textContent, c[9].textContent));
-  if (has(c[10])) { const t = c[10].textContent; c[10].replaceChildren(link('tel:' + t.replace(/ /g, ''), t.replace(/^\+351 /, ''))); }
   const td = el('td'), sel = el('select', 'pilula'); // status picker (extra column, not part of the HTML row contract)
   sel.setAttribute('aria-label', 'Estado de seguimento'); sel.dataset.id = r.id; r.sel = sel;
   for (const k in STATUS) sel.append(new Option(STATUS[k] + (NOTE.includes(k) ? ' 🔔' : ''), k));
@@ -219,9 +249,62 @@ function enhance(r) {
   r.done = true;
 }
 
+const ph = t => el('i', '', t); // the placeholder the rows use for a missing value
+const mailTo = v => link('mailto:' + v, v), telTo = v => link('tel:' + v.replace(/ /g, ''), v.replace(/^\+351 /, ''));
+function conflict(l) { // Local belongs to another Distrito: the warning text, or ''
+  if (!l.local || !l.distrito || LOC[l.distrito]?.has(l.local)) return '';
+  const home = Object.keys(LOC).filter(d => LOC[d].has(l.local));
+  return home.length ? `⚠ ${l.local} fica em ${home.join(' ou ')}, não em ${l.distrito}` : '';
+}
+
+function contactCell(td, r, kind) { // the first contact, tagged when it is the recommended location's own
+  const v = contacts(r, kind)[0], f = shown(r)[0];
+  if (!v) return td.replaceChildren(ph('indisponível'));
+  td.replaceChildren(kind === 'email' ? mailTo(v) : telTo(v));
+  if (v !== f[kind] || rec(r) !== f) return;
+  const h = el('i', 'help', '?'); h.setAttribute('role', 'button'); h.tabIndex = 0; h.setAttribute('aria-label', 'O que é isto?');
+  h.dataset.tip = S.c || S.d ? 'É o contacto da localização no distrito selecionado.' : 'É o contacto da sede da entidade.';
+  td.append(' ', el('span', 'rec', '(recomendado)'), h);
+}
+
+function expand(r) { // <details> with the other locations (all of them for a national entity) and the contacts the cells do not show
+  const sh = shown(r), all = r.dists.length >= 9, items = [];
+  for (const l of all ? sh : sh.slice(1)) {
+    const parts = [l.distrito, l.local, l.morada, l.telefone && telTo(l.telefone), l.email && mailTo(l.email)].filter(Boolean);
+    if (!parts.length) continue;
+    const li = el('li');
+    parts.forEach((p, i) => { if (i) li.append(' · '); li.append(p); });
+    if (conflict(l)) li.append(el('span', 'conf', conflict(l)));
+    items.push(li);
+  }
+  const more = [...contacts(r, 'telefone').slice(1).map(telTo), ...contacts(r, 'email').slice(1).map(mailTo)];
+  if (more.length) {
+    const li = el('li', null, 'Outros contactos: ');
+    more.forEach((p, i) => { if (i) li.append(', '); li.append(p); });
+    items.push(li);
+  }
+  if (!items.length) return null;
+  const d = el('details', 'locs'), ul = el('ul');
+  ul.append(...items); d.append(el('summary', null, all ? 'Todas as localizações' : 'Outras localizações'), ul);
+  return d;
+}
+
+function place(r) { // the cells that depend on the filter: shown location, contacts, other locations (runs on every render)
+  if (!r.ok) return; // ⬜ and 🔒 rows have nothing to place
+  const c = r.el.cells, f = shown(r)[0], was = c[5].querySelector('details.locs')?.open, d = expand(r);
+  c[3].replaceChildren(f.local || ph('indisponível'));
+  c[4].replaceChildren(distLabel(r) || ph('desconhecido'));
+  c[4].title = r.dists.join(', ');
+  if (conflict(f)) c[4].append(el('span', 'conf', conflict(f)));
+  c[5].replaceChildren(f.morada || ph('indisponível'));
+  if (d) { d.open = !!was; c[5].append(d); }
+  contactCell(c[9], r, 'email'); contactCell(c[10], r, 'telefone');
+}
+
 function render(slice) {
   slice.forEach(r => {
     r.done || enhance(r);
+    place(r);
     r.el.dataset.st = r.sel.dataset.st = r.sel.value = stOf(r); // colours the card and the pill
     listCell(r);
   });
@@ -325,7 +408,7 @@ if (new URLSearchParams(location.search).has('dev')) { // open index.html?dev to
 // ---------- Custom lists ----------
 const inLists = r => [...LST].filter(([, m]) => m.has(r.id)).map(([n]) => n);
 const members = () => [...LST.get(S.l).keys()].map(id => BYID.get(id)).filter(r => r && !r.removed).sort((a, b) => a.n - b.n);
-const emails = () => [...new Set(members().map(r => r.email).filter(Boolean))];
+const emails = () => uniq(members().map(r => contacts(r, 'email')[0]));
 const slug = () => norm(S.l).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'lista';
 
 function addList(name) { // creates the list if new; returns its trimmed name, '' if there is none
@@ -440,8 +523,8 @@ const ACT = { // every [data-act] button
   csv: () => {
     // ponytail: ';' separator because pt-PT Excel expects it (Sheets detects either)
     const cell = v => { v = String(v ?? ''); return '"' + (/^[=+\-@\t\r]/.test(v) ? "'" : '') + v.replace(/"/g, '""') + '"'; }; // a leading = + - @ gets a ' so spreadsheets do not run it as a formula
-    const rows = members().map(r => [r.n, r.nome, r.local, r.distrito, r.morada, r.email, r.tel?.replace(/^\+351 /, ''), r.site, STATUS[stOf(r)], LST.get(S.l).get(r.id)]);
-    download(slug() + '.csv', '\ufeff' + [['Nº', 'Nome', 'Local', 'Distrito', 'Morada', 'E-mail', 'Telefone', 'Website', 'Seguimento', 'Nota'], ...rows]
+    const rows = members().map(r => { const f = shown(r)[0]; return [r.n, r.nome, f.local, f.distrito, r.dists.join('; '), f.morada, contacts(r, 'email')[0], contacts(r, 'telefone')[0]?.replace(/^\+351 /, ''), r.site, STATUS[stOf(r)], LST.get(S.l).get(r.id)]; });
+    download(slug() + '.csv', '\ufeff' + [['Nº', 'Nome', 'Local', 'Distrito', 'Distritos', 'Morada', 'E-mail', 'Telefone', 'Website', 'Seguimento', 'Nota'], ...rows]
       .map(x => x.map(cell).join(';')).join('\r\n'), 'text/csv;charset=utf-8');
   },
   del: () => {
@@ -529,13 +612,14 @@ try {
 document.addEventListener('click', e => document.querySelectorAll('details.src[open]').forEach(d => { if (!d.contains(e.target)) d.open = false; }));
 
 // ? badge in the Estado filter: press to show the explanation as a tooltip (works on touch, where title doesn't)
-const tip = $('#priv-tip');
+const tip = $('#priv-tip'), TIP0 = tip.textContent; // the 🔒 text; a .help with data-tip shows its own
 const tipToggle = e => {
   const h = e.target.closest('.help');
   if (!h) { tip.hidden = true; return; }
   e.preventDefault();
   tip.hidden = !tip.hidden;
   if (tip.hidden) return;
+  tip.textContent = h.dataset.tip || TIP0;
   const r = h.getBoundingClientRect();
   tip.style.top = r.bottom + 6 + 'px';
   tip.style.left = Math.max(8, Math.min(r.left - 8, innerWidth - tip.offsetWidth - 8)) + 'px';

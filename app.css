@@ -339,3 +339,11 @@ td:nth-child(13) { position: relative; grid-column: 2 / 4; grid-row: 6; padding-
 .help { position: absolute; left: 0; top: 2em; width: 1.4em; height: 1.4em; line-height: 1.3em; text-align: center; font-style: normal; font-size: .75em; cursor: pointer; border: 1px solid currentColor; border-radius: 50%; opacity: .7; }
 .tip { position: fixed; z-index: 10; margin: 0; max-width: min(18rem, calc(100vw - 16px)); padding: .5em .7em; font-size: .85em; border-radius: 6px; background: #222; color: #fff; box-shadow: 0 2px 8px #0005; }
 .tip[hidden] { display: none; }
+
+/* ---------- Several locations: "(recomendado)" tag and the expand list ---------- */
+.rec { font-size: .85em; color: var(--muted); white-space: nowrap; }
+td:nth-child(n+10):nth-child(-n+11) .help { position: static; display: inline-block; margin-left: 6px; vertical-align: middle; }
+.locs { margin-top: 4px; font-size: 13.5px; }
+.locs summary { cursor: pointer; color: var(--accent); min-height: 24px; }
+.locs ul { margin: 4px 0 0; padding-left: 1.2em; display: grid; gap: 4px; line-height: 1.4; overflow-wrap: anywhere; }
+.locs a { display: inline-block; padding: 3px 0; }

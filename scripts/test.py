@@ -1215,7 +1215,7 @@ def _part_locations():
     assert "(recomendado)" in _cell(p, "e0011", 10) and "É o contacto da localização no distrito selecionado." in p
     assert "222 000 000" in _cell(p, "e0012", 10) and "(recomendado)" not in _cell(p, "e0012", 10)  # a loose number: no tag
     assert "e0014" not in _ids(p)
-    assert _ids(c) == ["e0013"] and "Cascais" in _cell(c, "e0013", 3) and "(recomendado)" in _cell(c, "e0013", 10)
+    assert _ids(c) == ["e0013"] and "Cascais" in _cell(c, "e0013", 3) and "(recomendado)" not in _cell(c, "e0013", 10)  # its only phone: nothing to recommend over
     assert "e0012" in _ids(f) and "289 000 000" in _cell(f, "e0012", 10)
     assert "e0014" not in _ids(u)  # it has Braga
 

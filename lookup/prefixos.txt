@@ -1,0 +1,53 @@
+# Geographic phone prefix (ANACOM Plano Nacional de Numeração) -> Distrito(s) it covers, main one first.
+# Format: prefix<TAB>Distrito[<TAB>Distrito]. A second distrito marks a code area that crosses a district border.
+21	Lisboa	Setúbal
+22	Porto	Aveiro
+231	Aveiro	Coimbra	Viseu
+232	Viseu
+233	Coimbra
+234	Aveiro
+235	Coimbra
+236	Leiria
+238	Guarda	Coimbra
+239	Coimbra
+241	Santarém	Portalegre
+242	Portalegre
+243	Santarém
+244	Leiria
+245	Portalegre
+249	Santarém
+251	Viana do Castelo
+252	Braga	Porto
+253	Braga
+254	Vila Real	Viseu
+255	Porto	Braga	Aveiro	Viseu	Vila Real
+256	Aveiro
+258	Viana do Castelo
+259	Vila Real
+261	Lisboa
+262	Leiria	Lisboa
+263	Lisboa	Santarém
+265	Setúbal
+266	Évora
+268	Évora	Portalegre
+269	Setúbal
+271	Guarda
+272	Castelo Branco
+273	Bragança
+274	Castelo Branco
+275	Castelo Branco	Guarda
+276	Vila Real
+277	Castelo Branco
+278	Bragança	Vila Real
+279	Bragança	Guarda
+281	Faro
+282	Faro
+283	Beja
+284	Beja
+285	Beja
+286	Beja
+289	Faro
+291	Madeira
+292	Açores
+295	Açores
+296	Açores

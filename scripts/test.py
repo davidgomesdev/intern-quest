@@ -671,9 +671,9 @@ scenario("share", """out.banner = $('#partilha').textContent; out.shown = !$('#p
   $('[data-act=shsave]').click(); out.gone = $('#partilha').hidden;""", "share=Amigos%3A0001,0003,9999,xx,0003")
 scenario("shskip", "$('[data-act=shskip]').click();", "share=Amigos%3A0001")
 scenario("garbage", "out.shown = !$('#partilha').hidden;", "share=garbage")
-IMPORT = """const dt = new DataTransfer(); dt.items.add(new File([JSON.stringify(%FILE%)], 'l.json'));
+IMPORT = """const dt = new DataTransfer(), file = new File([JSON.stringify(%FILE%)], 'l.json'); dt.items.add(file);
   $('#imp-f').files = dt.files; $('#imp-f').dispatchEvent(new Event('change'));
-  for (let i = 0; i < 40 && !out.alert; i++) await tick();  // reading the file takes real time, not virtual"""
+  for (let i = 0; i < 400 && !out.alert; i++) { await tick(); await file.text(); }  // reading the file takes real time, not virtual: also do a real read per turn, and allow plenty of turns on a slow runner"""
 scenario("backup", """SAVED.e0001 = {s: 'visto', t: 1000}; SAVED.e0002 = {s: 'email', t: 5000};
   $('[data-act=exp]').click(); out.backup = out.blob; out.file2 = out.file;
   """ + IMPORT.replace("%FILE%", """{listas: [['Importada', [['e0001', 'x'], ['bad', 'y']]], ['Favoritas', [['e0003', '']]]],
@@ -683,9 +683,9 @@ scenario("link", """SAVED.e0001 = {s: 'visto', t: 1000}; $('[data-act=lnk]').cli
 scenario("toobig", """for (let i = 0; i < 400; i++) SAVED['e' + (1000 + i)] = {s: 'visto', t: 1000 + i};
   $('[data-act=lnk]').click(); out.copied2 = out.copied;""")
 scenario("linked", "out.hash0 = location.hash;", "copia=" + quote(json.dumps({"listas": [["Recebida", [["e0001", "n"]]]], "estados": {"e0003": {"s": "visto", "t": 7}}})))
-scenario("badfile", """const dt = new DataTransfer(); dt.items.add(new File(['{nope'], 'l.json'));
+scenario("badfile", """const dt = new DataTransfer(), file = new File(['{nope'], 'l.json'); dt.items.add(file);
   $('#imp-f').files = dt.files; $('#imp-f').dispatchEvent(new Event('change'));
-  for (let i = 0; i < 40 && !out.alert; i++) await tick();  // reading the file takes real time, not virtual""")
+  for (let i = 0; i < 400 && !out.alert; i++) { await tick(); await file.text(); }  // reading the file takes real time, not virtual: also do a real read per turn, and allow plenty of turns on a slow runner""")
 scenario("corrupt", view, seed="'{bad'")  # corrupt storage: page still works, no lists
 scenario("hostile", view, seed="""JSON.stringify([["__proto__", [["e0002", "x"], ["__proto__", "y"]]], ["ok", [["e0003"]]], [" ", []]])""")
 

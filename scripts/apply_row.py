@@ -6,9 +6,11 @@ areas(list) adicional website sources(list) cleared(list of field names) private
 Old flat keys local distrito morada telefone email still work: one location plus one phone / e-mail.
 Missing/null/empty values become the <i>indisponível</i>/<i>desconhecido</i> placeholders.
 Locations are deduped, the first `main` kept, sorted main first then by Distrito rank; data-loc is
-written only when the row has several locations, phones or e-mails.
+written only when the row has several locations, phones or e-mails (its `l` may be empty when only contacts were found).
 When the old row is 🔄, a field the JSON leaves empty keeps the old value unless named in `cleared`
-(areas adicional website locations telefones emails); sources add to the old data-src.
+(areas adicional website locations telefones emails). Locations merge: a new one matching an old one on
+(local, distrito) takes the old morada / telefone / email it lacks, old ones with no match are kept unless
+`cleared` has "locations"; sources add to the old data-src.
 Key `private: true` writes a 🔒 row instead: all placeholders, no data-src, other keys ignored.
 Nome, Nº and the row shape come from this script and the existing row, never from the JSON.
 """
@@ -58,6 +60,25 @@ def _old_state(old, cells):
     return ([loc] if loc else []), _strs([cell(10)]), _strs([cell(9)])
 
 
+def _merge_locs(new, old, cleared):
+    """A refill's locations: each new one takes the morada / phone / e-mail it lacks from the old one with
+    the same (local, distrito); old locations without a match are kept. `cleared` phones / e-mails are not kept."""
+    drop = {k for k, f in (('telefone', 'telefones'), ('email', 'emails')) if f in cleared}
+    old = [x for x in (_loc({k: v for k, v in y.items() if k not in drop}) for y in old) if x]
+    ident = lambda x: (x.get('local'), x.get('distrito'))
+    taken = set()
+    for x in new:
+        for y in old:
+            if ident(y) == ident(x) and id(y) not in taken:
+                taken.add(id(y))
+                for k, v in y.items():
+                    if k != 'main':
+                        x.setdefault(k, v)
+                break
+    new = [{k: x[k] for k in LOC_ORDER if k in x} for x in new]
+    return new + [y for y in old if id(y) not in taken]
+
+
 def build(old, d):
     """Return the new ✅ (or 🔒 if d["private"]) row for the old row line and research dict d."""
     cells = re.findall(r'<td>(.*?)</td>', old)
@@ -86,8 +107,8 @@ def build(old, d):
     emails = _strs((d.get('emails') or []) + [d.get('email')])
     if refill:
         old_l, old_t, old_e = _old_state(old, cells)
-        if not locs and keep('locations'):
-            locs = old_l
+        if keep('locations'):
+            locs = _merge_locs(locs, old_l, cleared)
         if not phones and keep('telefones'):
             phones = old_t
         if not emails and keep('emails'):
@@ -102,7 +123,7 @@ def build(old, d):
     on_locs = lambda k: {x[k] for x in locs if k in x}
     data = {'l': locs, 't': [t for t in phones if t not in on_locs('telefone')],
             'e': [e for e in emails if e not in on_locs('email')]}
-    local, dist, morada, email, tel = check.visible({**data, 'l': locs or [{}]})
+    local, dist, morada, email, tel = check.visible(data)
 
     def field(key, new, dflt):
         if new:
@@ -120,7 +141,7 @@ def build(old, d):
     attrs = flag
     if urls:  # ponytail: no sources, no attribute
         attrs += f' data-src="{esc(" ".join(urls))}"'
-    if locs and check.needs_loc(data):
+    if check.needs_loc(data):
         attrs += ' data-loc="' + html.escape(json.dumps(data, ensure_ascii=False, separators=(',', ':'))) + '"'
     new = ['✅', cells[1], cells[2], local, dist, morada, areas, adicional, website, email, tel]
     return f'<tr id="{rid}"{attrs}>' + ''.join(f'<td>{c}</td>' for c in new) + '</tr>'

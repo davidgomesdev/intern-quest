@@ -124,6 +124,37 @@ def test_check_data_src():
     assert 'data-src="https://a.pt/x?a=1&amp;b=2"' in apply_row.build(EMPTY, {"sources": ["https://a.pt/x?a=1&b=2", "u"]})
 
 
+LOC2 = {"l": [{"local": "Lisboa", "distrito": "Lisboa", "morada": 'Rua "A" & <B>', "telefone": "+351 213 000 000", "main": True},
+              {"local": "Porto", "distrito": "Porto", "morada": "Rua P 1"}], "t": [], "e": ["geral@x.pt"]}
+
+
+def loc_attr(d): return ' data-loc="' + html.escape(json.dumps(d, ensure_ascii=False, separators=(",", ":"))) + '"'
+
+
+def loc_row(d, status="✅"):
+    v = check.visible(d)
+    cells = list(FILLED_CELLS)
+    cells[0] = status; cells[3:6] = v[:3]; cells[9:11] = v[3:]
+    return row(cells, attr=loc_attr(d))
+
+
+def test_check_loc():
+    assert check.check_row(loc_row(LOC2)) == []
+    assert check.check_row(loc_row(LOC2, "🔄")) == []
+    assert check.check_row(row(["🔄"] + FILLED_CELLS[1:])) == []
+    bad = lambda **kv: check.check_row(loc_row({**LOC2, **kv}))
+    assert bad(l=[{**LOC2["l"][0], "local": "Porto"}, LOC2["l"][1]])           # Local not in its Distrito
+    assert bad(l=[LOC2["l"][1], LOC2["l"][0]])                                  # main not first
+    assert bad(l=[{**x, "main": True} for x in LOC2["l"]])                       # two mains
+    assert bad(l=[LOC2["l"][0]], e=[])                                           # nothing the cells lack: attribute must be absent
+    assert bad(t=["212"])                                                        # bad phone
+    unk = {"l": [{"morada": "Rua U"}, {"morada": "Rua V"}], "t": [], "e": []}
+    assert check.check_row(loc_row(unk)) == []                                   # unknown Distrito: placeholders, valid
+    swapped = loc_row(LOC2).replace("<td>Lisboa</td><td>Lisboa</td>", "<td>Porto</td><td>Porto</td>")
+    assert check.check_row(swapped)                                              # visible cells must equal visible()
+    assert check.check_row(row(["⬜", "0001", "X"] + [""] * 8, attr=loc_attr(LOC2)))  # not on ⬜
+
+
 def test_check_rejects_unusable_urls():
     for bad in ["https://a:99999", "https://[", "https:///x", "http://a\\b"]:
         assert check.check_row(filled(c8=bad)) != [], bad

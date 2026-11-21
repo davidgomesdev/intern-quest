@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Validate index.html rows. Usage: scripts/check.py FILE"""
+import html
+import json
 import re
 import subprocess
 import sys
@@ -11,7 +13,7 @@ IND = '<i>indisponível</i>'
 DESC = '<i>desconhecido</i>'
 SLUGS = {'clinica', 'neuropsicologia', 'psicoterapia', 'educacao',
          'organizacoes', 'justica', 'comunitaria', 'desporto'}
-ROW = re.compile(r'^<tr id="e(\d{4,})"((?: data-removed="1"| data-src="[^"<>]*")*)>((?:<td>(?:' + ESC
+ROW = re.compile(r'^<tr id="e(\d{4,})"((?: data-removed="1"| data-src="[^"<>]*"| data-loc="[^"<>]*")*)>((?:<td>(?:' + ESC
                  + r'|<i>(?:indisponível|desconhecido)</i>)*</td>){11})</tr>$')
 CELLS = re.compile(r'<td>(.*?)</td>')
 TEXT = re.compile(ESC + '+')
@@ -65,10 +67,78 @@ def _filled_ok(i, v):
     return v == IND or bool({9: EMAIL, 10: PHONE}[i].fullmatch(v))
 
 
+LOC_ATTR = re.compile(r' data-loc="([^"<>]*)"')
+LOC_KEYS = {'local', 'distrito', 'morada', 'telefone', 'email', 'main'}
+
+
+def loc_key(i, loc):
+    """Sort key of location i: the main one first, then by Distrito rank, then as given."""
+    return (not loc.get('main'), RANK.get(loc.get('distrito'), 99), i)
+
+
+def _esc(s):
+    return s.strip().replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+
+def visible(data):
+    """The cells [Local, Distrito, Morada, E-mail, Telefone] the row shows for its first location."""
+    first = data['l'][0]
+    def cell(v, none=IND):
+        return _esc(v) if v else none
+    emails, phones = data.get('e') or [None], data.get('t') or [None]
+    return [cell(first.get('local')), cell(first.get('distrito'), DESC), cell(first.get('morada')),
+            cell(first.get('email') or emails[0]), cell(first.get('telefone') or phones[0])]
+
+
+def needs_loc(data):
+    """Does the row need data-loc: more than one location, phone or e-mail?"""
+    phones = {x for x in [l.get('telefone') for l in data['l']] + data['t'] if x}
+    emails = {x for x in [l.get('email') for l in data['l']] + data['e'] if x}
+    return len(data['l']) > 1 or len(phones) > 1 or len(emails) > 1
+
+
+def _loc_errs(raw, cells):
+    try:
+        d = json.loads(html.unescape(raw))
+    except ValueError:
+        return ['data-loc: not valid JSON']
+    if not (isinstance(d, dict) and set(d) == {'l', 't', 'e'} and all(isinstance(d[k], list) for k in d) and d['l']):
+        return ['data-loc: must be {"l": [location...], "t": [...], "e": [...]} with at least one location']
+    errs = []
+    for k, rx in (('t', PHONE), ('e', EMAIL)):
+        if not all(isinstance(x, str) and rx.fullmatch(x) for x in d[k]):
+            errs.append(f'data-loc: "{k}" items must be valid {"phones" if k == "t" else "e-mails"}')
+    for n, loc in enumerate(d['l']):
+        if not (isinstance(loc, dict) and set(loc) <= LOC_KEYS):
+            return errs + [f'data-loc: location {n} must be an object with keys {sorted(LOC_KEYS)}']
+        if not all(v is None or (v is True if k == 'main' else isinstance(v, str) and v) for k, v in loc.items()):
+            return errs + [f'data-loc: location {n} has an empty or non-string value']
+        dis, lc = loc.get('distrito'), loc.get('local')
+        if dis is not None and dis not in LOOKUP:
+            errs.append(f'data-loc: location {n} Distrito {dis!r} is not in lookup/distritos.txt')
+        elif lc is not None and (dis is None or lc not in LOOKUP[dis]):
+            errs.append(f'data-loc: location {n} Local {lc!r} is not in its Distrito')
+        for k, rx in (('telefone', PHONE), ('email', EMAIL)):
+            if loc.get(k) is not None and not rx.fullmatch(loc[k]):
+                errs.append(f'data-loc: location {n} {k} is invalid')
+    if errs:
+        return errs
+    if sum(1 for l in d['l'] if l.get('main')) > 1:
+        return ['data-loc: at most one main location']
+    if d['l'] != [l for _, l in sorted(enumerate(d['l']), key=lambda t: loc_key(*t))]:
+        return ['data-loc: locations must be sorted (main first, then by Distrito rank)']
+    if not needs_loc(d):
+        return ['data-loc: not needed (one location, at most one phone and one e-mail): remove it']
+    v = visible(d)
+    if cells[3:6] + cells[9:11] != v:
+        return [f'data-loc: cells 3, 4, 5, 9, 10 must equal the first location {v}']
+    return []
+
+
 def check_row(line):
     m = ROW.match(line)
     if not m:
-        return ['line does not match row shape (id, optional data-removed/data-src, 11 cells)']
+        return ['line does not match row shape (id, optional data-removed/data-src/data-loc, 11 cells)']
     rid, cells = m.group(1), CELLS.findall(m.group(3))
     src = SRC.search(m.group(2))
     if src and not (src.group(1) and all(map(_url_ok, src.group(1).split(' ')))):
@@ -77,10 +147,13 @@ def check_row(line):
         return [f'expected 11 cells, got {len(cells)}']
     errs = []
     status = cells[0]
-    if status not in ('⬜', '✅', '🔒'):
+    if status not in ('⬜', '✅', '🔄', '🔒'):
         return [f'Status: unknown value {status!r}']
-    if src and status != '✅':
+    if src and status not in ('✅', '🔄'):
         errs.append(f'data-src: not allowed on a {status} row')
+    lattr = LOC_ATTR.search(m.group(2))
+    if lattr and status not in ('✅', '🔄'):
+        errs.append(f'data-loc: not allowed on a {status} row')
     if cells[1] != rid:
         errs.append(f'Nº: {cells[1]!r} does not match id {rid}')
     if not TEXT.fullmatch(cells[2]):
@@ -94,13 +167,15 @@ def check_row(line):
             if v not in (IND, DESC):
                 errs.append(f'{NAMES[i]}: must be indisponível/desconhecido on a 🔒 row')
         elif not _filled_ok(i, v):
-            errs.append(f'{NAMES[i]}: invalid value {v!r} on a ✅ row')
-    if status == '✅' and not errs:
+            errs.append(f'{NAMES[i]}: invalid value {v!r} on a {status} row')
+    if status in ('✅', '🔄') and not errs:
         loc, dis = cells[3], cells[4]
         if dis != DESC and dis not in LOOKUP:
             errs.append(f'Distrito: {dis!r} is not in lookup/distritos.txt')
         elif loc != IND and loc not in LOOKUP.get(dis, ()):
             errs.append(f'Local: {loc!r} is not in lookup/{dis}.txt' if dis != DESC else 'Local: needs a known Distrito')
+    if status in ('✅', '🔄') and not errs and lattr:
+        errs += _loc_errs(lattr.group(1), cells)
     return errs
 
 
@@ -244,10 +319,11 @@ def main(argv):
     text = open(argv[1], encoding='utf-8').read()
     todo = len(re.findall(r'^<tr id="e\d+"[^>]*><td>⬜', text, re.M))
     done = len(re.findall(r'^<tr id="e\d+"[^>]*><td>✅', text, re.M))
+    redo = len(re.findall(r'^<tr id="e\d+"[^>]*><td>🔄', text, re.M))
     priv = len(re.findall(r'^<tr id="e\d+"[^>]*><td>🔒', text, re.M))
     for e in errs:
         print(e)
-    print(f'rows: {todo + done + priv}  ⬜ {todo}  ✅ {done}  🔒 {priv}')
+    print(f'rows: {todo + done + redo + priv}  ⬜ {todo}  ✅ {done}  🔄 {redo}  🔒 {priv}')
     return 1 if errs else 0
 
 

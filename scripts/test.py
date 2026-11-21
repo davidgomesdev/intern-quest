@@ -323,6 +323,16 @@ def test_apply_row_refill_keeps_data_loc():
     assert "data-loc" not in dropped and check.check_row(dropped) == []
 
 
+def test_apply_row_refill_keeps_located_contacts():
+    old = loc_row(LOC2, "🔄")
+    new = apply_row.build(old, {"locations": [{"local": "Faro", "distrito": "Faro", "morada": "Rua F"}]})
+    assert check.check_row(new) == [] and "+351 213 000 000" in new and "geral@x.pt" in new, new
+    gone = apply_row.build(old, {"locations": [{"local": "Faro", "distrito": "Faro", "morada": "Rua F"}], "cleared": ["telefones", "emails"]})
+    assert "+351 213 000 000" not in gone and "geral@x.pt" not in gone
+    dup = apply_row.build(row(["⬜", "0001", "X"] + [""] * 8), {"locations": [{"local": "Faro", "distrito": "Faro"}, {"local": "Faro", "distrito": "Faro", "main": True}]})
+    assert "data-loc" not in dup and check.check_row(dup) == []
+
+
 def test_apply_batch():
     """End to end in a throwaway repo: one ok commit, one pre-failed, one missing JSON."""
     d = tempfile.mkdtemp()

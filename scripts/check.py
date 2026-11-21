@@ -21,9 +21,18 @@ PHONE = re.compile(r'\+\d{1,3}(?: ?\d)+')
 NAMES = ['Status', 'Nº', 'Nome', 'Local', 'Distrito', 'Morada', 'Áreas',
          'Adicional', 'Website', 'E-mail', 'Telefone']
 _LK = Path(__file__).resolve().parent.parent / 'lookup'
+def _lines(f):
+    """The non-comment lines of a lookup file."""
+    return [l for l in f.read_text(encoding='utf-8').splitlines() if l and l[0] != '#']
+
+
+# distritos in rank order (biggest first): the position in lookup/distritos.txt is the rank
+DISTRITOS = _lines(_LK / 'distritos.txt')
+RANK = {d: i for i, d in enumerate(DISTRITOS)}
+# geographic phone prefix -> the distritos its code area covers (main one first)
+PREFIXOS = {p: ds for p, *ds in (l.split('\t') for l in _lines(_LK / 'prefixos.txt'))}
 # distrito -> its allowed Local names (municípios, plus Lisboa's freguesias); '#' lines are comments
-LOOKUP = {f.stem: {l for l in f.read_text(encoding='utf-8').splitlines() if l and l[0] != '#'}
-          for f in _LK.glob('*.txt') if f.stem != 'distritos'}
+LOOKUP = {f.stem: set(_lines(f)) for f in _LK.glob('*.txt') if f.stem not in ('distritos', 'prefixos')}
 
 
 def _url_ok(v):

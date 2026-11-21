@@ -1,20 +1,20 @@
-Aveiro
-Beja
-Braga
-Bragança
-Castelo Branco
-Coimbra
-Évora
-Faro
-Guarda
-Leiria
 Lisboa
-Portalegre
 Porto
-Santarém
+Coimbra
+Faro
 Setúbal
+Braga
+Aveiro
+Leiria
+Santarém
+Viseu
+Madeira
+Açores
 Viana do Castelo
 Vila Real
-Viseu
-Açores
-Madeira
+Castelo Branco
+Évora
+Guarda
+Beja
+Bragança
+Portalegre

@@ -535,10 +535,26 @@ def test_head_sets_js_class_before_css():
     assert i < j and head.rindex("<script", 0, i) > head.index("<head>") and "setTimeout" in head[i:j]
 
 
+def test_district_rank():
+    assert check.DISTRITOS[:4] == ["Lisboa", "Porto", "Coimbra", "Faro"]
+    assert sorted(check.DISTRITOS) == sorted(check.LOOKUP) and len(check.DISTRITOS) == 20
+    assert "prefixos" not in check.LOOKUP
+
+
+def test_prefixos():
+    assert check.PREFIXOS["21"] == ["Lisboa", "Setúbal"] and check.PREFIXOS["289"] == ["Faro"]
+    assert all(d in check.RANK for ds in check.PREFIXOS.values() for d in ds)
+    assert all(re.fullmatch(r"2\d{1,2}", p) for p in check.PREFIXOS)
+
+
 def test_lookup_embedded():
     embed = load("embed_lookup")
     with open(SHELL, encoding="utf-8") as f:
-        assert embed.line() in f.read().split("\n"), "index.html lookup is stale: run scripts/embed_lookup.py"
+        lines = f.read().split("\n")
+    assert embed.line() in lines, "index.html lookup is stale: run scripts/embed_lookup.py"
+    assert embed.prefix_line() in lines, "index.html prefixos is stale: run scripts/embed_lookup.py"
+    lk = next(l for l in lines if l.startswith(embed.OPEN))
+    assert list(json.loads(lk[len(embed.OPEN):-len("</script>")])) == check.DISTRITOS
 
 
 def _fixture():

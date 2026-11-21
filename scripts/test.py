@@ -288,6 +288,41 @@ def test_apply_row():
     assert apply_row.build(old, {}).count(IND) == 6
 
 
+def test_apply_row_locations():
+    old = row(["⬜", "0001", "X"] + [""] * 8)
+    d = {"locations": [{"local": "Porto", "distrito": "Porto", "morada": "Rua P"},
+                       {"local": "Faro", "distrito": "Faro", "morada": 'Rua "F" & 1'},
+                       {"local": "Lisboa", "distrito": "Lisboa", "morada": "Sede", "telefone": "+351 213 000 000", "main": True}],
+         "telefones": ["+351 912 000 000", "+351 213 000 000"], "emails": ["a@x.pt"], "areas": ["justica"], "sources": ["https://x.pt"]}
+    new = apply_row.build(old, d)
+    assert check.check_row(new) == []
+    data = json.loads(html.unescape(re.search(r'data-loc="([^"]*)"', new).group(1)))
+    assert [x["distrito"] for x in data["l"]] == ["Lisboa", "Porto", "Faro"]      # main, then rank
+    assert data["t"] == ["+351 912 000 000"]                                       # the Lisboa number lives on its location
+    assert "<td>Lisboa</td><td>Lisboa</td><td>Sede</td>" in new
+    flat = apply_row.build(old, {"local": "Cascais", "distrito": "Lisboa", "morada": "Rua A", "telefone": "+351 214 000 000"})
+    assert "data-loc" not in flat and "<td>Cascais</td>" in flat and check.check_row(flat) == []
+
+
+def test_apply_row_refill_keeps():
+    old = row(["🔄"] + FILLED_CELLS[1:], attr=' data-src="https://old.pt"')
+    new = apply_row.build(old, {"areas": [], "website": None, "sources": ["https://new.pt"]})
+    c = re.findall(r"<td>(.*?)</td>", new)
+    assert c[0] == "✅" and c[3:6] == FILLED_CELLS[3:6] and c[6] == "clinica educacao" and c[8] == "https://example.pt"
+    assert 'data-src="https://old.pt https://new.pt"' in new
+    gone = apply_row.build(old, {"website": None, "cleared": ["website"]})
+    assert re.findall(r"<td>(.*?)</td>", gone)[8] == IND
+    fresh = apply_row.build(row(["⬜", "0001", "X"] + [""] * 8), {"website": None})
+    assert re.findall(r"<td>(.*?)</td>", fresh)[8] == IND                         # guard only on 🔄
+
+
+def test_apply_row_refill_keeps_data_loc():
+    kept = apply_row.build(loc_row(LOC2, "🔄"), {})
+    assert check.check_row(kept) == [] and loc_attr(LOC2) in kept, kept
+    dropped = apply_row.build(loc_row(LOC2, "🔄"), {"cleared": ["locations", "telefones", "emails"]})
+    assert "data-loc" not in dropped and check.check_row(dropped) == []
+
+
 def test_apply_batch():
     """End to end in a throwaway repo: one ok commit, one pre-failed, one missing JSON."""
     d = tempfile.mkdtemp()

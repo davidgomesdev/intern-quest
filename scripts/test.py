@@ -426,8 +426,15 @@ def test_apply_batch():
             json.dump({"locations": [{"local": "Porto", "distrito": "Porto", "morada": "Rua P"}], "sources": ["https://a.pt/z"]}, f)
         r = subprocess.run([sys.executable, os.path.join(HERE, "apply_batch.py"), "--refill", out, "0002"],
                            cwd=d, capture_output=True, text=True)
+        assert r.returncode == 0 and r.stdout.startswith("e0002 held ⚠️ kept 1 old location(s)"), r.stdout + r.stderr
+        assert g("log", "-1", "--format=%s").strip() == "pend2"                  # held: not applied in the batch PR
+        assert open(os.path.join(out, "held.txt"), encoding="utf-8").read() == "0002\n"
+        assert "⚠️" not in open(os.path.join(out, "body.md"), encoding="utf-8").read()  # the batch PR still auto-merges
+        r = subprocess.run([sys.executable, os.path.join(HERE, "apply_batch.py"), "--review", out, "0002"],
+                           cwd=d, capture_output=True, text=True)
         assert r.returncode == 0 and r.stdout.startswith("e0002 ok ⚠️ kept 1 old location(s)"), r.stdout + r.stderr
-        body = open(os.path.join(out, "body.md"), encoding="utf-8").read()
+        assert g("log", "-1", "--format=%s").strip() == "feat(data): refill e0002"
+        body = open(os.path.join(out, "body-review.md"), encoding="utf-8").read()
         assert body.startswith("> ⚠️ 1 entity kept old locations") and "Cascais · Rua A 1" in body, body
         assert "Cascais" in open(p, encoding="utf-8").read()                    # the old location stays on the row
     finally:

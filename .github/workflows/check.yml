@@ -25,13 +25,16 @@ jobs:
           extra=$(git diff --name-only "origin/$BASE...HEAD" | grep -vx 'index.html' || true)
           if [ -n "$extra" ]; then echo "batch PR changes files besides index.html:"; echo "$extra"; exit 1; fi
   merge:
-    # Fill- and refill-batch PRs only: merge once `check` and `scope` have passed. The agent never merges.
+    # Fill- and refill-batch PRs only: merge once `check` and `scope` have passed. A ⚠️ in the title or body
+    # (refill kept old locations the research left out) waits for a human. The agent never merges.
     needs: [check, scope]
     if: >
       github.event_name == 'pull_request' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       (startsWith(github.head_ref, 'feat/fill-batch-') || startsWith(github.head_ref, 'feat/refill-batch-')) &&
-      github.event.pull_request.user.login == github.repository_owner
+      github.event.pull_request.user.login == github.repository_owner &&
+      !contains(github.event.pull_request.title, '⚠️') &&
+      !contains(github.event.pull_request.body, '⚠️')
     runs-on: ubuntu-latest
     permissions: { contents: write, pull-requests: write }
     steps:

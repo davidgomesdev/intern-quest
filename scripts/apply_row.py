@@ -79,6 +79,22 @@ def _merge_locs(new, old, cleared):
     return new + [y for y in old if id(y) not in taken]
 
 
+def _raw_locs(d):
+    """The research's locations; the old flat keys count as one."""
+    raw = d.get('locations')
+    return [{k: d.get(k) for k in ('local', 'distrito', 'morada')}] if raw is None else raw
+
+
+def left_out(old, d):
+    """Old locations a 🔄 refill keeps although the research did not list them: the batch PR then waits for a human."""
+    cells = re.findall(r'<td>(.*?)</td>', old)
+    if cells[0] != '🔄' or d.get('private') or 'locations' in (d.get('cleared') or []):
+        return []
+    ident = lambda x: (x.get('local'), x.get('distrito'))
+    listed = {ident(_loc(x)) for x in _raw_locs(d)}
+    return [y for y in _old_state(old, cells)[0] if ident(y) not in listed]
+
+
 def build(old, d):
     """Return the new ✅ (or 🔒 if d["private"]) row for the old row line and research dict d."""
     cells = re.findall(r'<td>(.*?)</td>', old)
@@ -92,11 +108,8 @@ def build(old, d):
     cleared = set(d.get('cleared') or [])
     keep = lambda field: refill and field not in cleared
 
-    raw = d.get('locations')
-    if raw is None:
-        raw = [{k: d.get(k) for k in ('local', 'distrito', 'morada')}]
     locs = []
-    for x in raw:
+    for x in _raw_locs(d):
         x = _loc(x)
         twin = [y for y in locs if {k: v for k, v in y.items() if k != 'main'} == {k: v for k, v in x.items() if k != 'main'}]
         if twin:

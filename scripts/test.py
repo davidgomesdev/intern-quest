@@ -143,7 +143,6 @@ def test_check_loc():
     assert check.check_row(loc_row(LOC2, "🔄")) == []
     assert check.check_row(row(["🔄"] + FILLED_CELLS[1:])) == []
     bad = lambda **kv: check.check_row(loc_row({**LOC2, **kv}))
-    assert bad(l=[{**LOC2["l"][0], "local": "Porto"}, LOC2["l"][1]])           # Local not in its Distrito
     assert bad(l=[LOC2["l"][1], LOC2["l"][0]])                                  # main not first
     assert bad(l=[{**x, "main": True} for x in LOC2["l"]])                       # two mains
     assert bad(l=[LOC2["l"][0]], e=[])                                           # nothing the cells lack: attribute must be absent
@@ -153,6 +152,31 @@ def test_check_loc():
     swapped = loc_row(LOC2).replace("<td>Lisboa</td><td>Lisboa</td>", "<td>Porto</td><td>Porto</td>")
     assert check.check_row(swapped)                                              # visible cells must equal visible()
     assert check.check_row(row(["⬜", "0001", "X"] + [""] * 8, attr=loc_attr(LOC2)))  # not on ⬜
+
+
+def test_check_loc_errors():
+    second = lambda **kv: {**LOC2, "l": [LOC2["l"][0], {"morada": "Rua P 1", **kv}]}
+    raw = lambda a: (row(FILLED_CELLS, attr=' data-loc="' + a + '"'))
+    cases = [
+        (loc_row(second(local="Lisboa", distrito="Porto")), "Local 'Lisboa' is not in its Distrito"),
+        (loc_row(second(local="Porto")), "Local 'Porto' is not in its Distrito"),  # Local without a Distrito
+        (loc_row(second(distrito="Narnia")), "not in lookup/distritos.txt"),
+        (loc_row(second(telefone="212")), "telefone is invalid"),
+        (loc_row(second(email="x")), "email is invalid"),
+        (loc_row(second(morada="")), "empty, non-string or untrimmed"),
+        (loc_row(second(morada=" Rua P")), "empty, non-string or untrimmed"),
+        (loc_row(second(morada="Rua\nP")), "empty, non-string or untrimmed"),
+        (loc_row(second(morada=5)), "empty, non-string or untrimmed"),
+        (loc_row(second(foo="x")), "must be an object with keys"),
+        (loc_row({**LOC2, "e": ["geral@x.pt", "x"]}), "items must be valid e-mails"),
+        (loc_row({**LOC2, "t": ["212"]}), "items must be valid phones"),
+        (raw("{"), "not valid JSON"),
+        (raw("[]"), "must be {"),
+        (raw("{&quot;l&quot;:[],&quot;t&quot;:[],&quot;e&quot;:[]}"), "at least one location"),
+    ]
+    for line, want in cases:
+        errs = check.check_row(line)
+        assert any(want in e for e in errs), (want, errs)
 
 
 def test_check_rejects_unusable_urls():

@@ -111,8 +111,8 @@ def _loc_errs(raw, cells):
     for n, loc in enumerate(d['l']):
         if not (isinstance(loc, dict) and set(loc) <= LOC_KEYS):
             return errs + [f'data-loc: location {n} must be an object with keys {sorted(LOC_KEYS)}']
-        if not all(v is None or (v is True if k == 'main' else isinstance(v, str) and v) for k, v in loc.items()):
-            return errs + [f'data-loc: location {n} has an empty or non-string value']
+        if not all(v is None or (v is True if k == 'main' else isinstance(v, str) and v and v == v.strip() and '\n' not in v) for k, v in loc.items()):
+            return errs + [f'data-loc: location {n} has an empty, non-string or untrimmed value']
         dis, lc = loc.get('distrito'), loc.get('local')
         if dis is not None and dis not in LOOKUP:
             errs.append(f'data-loc: location {n} Distrito {dis!r} is not in lookup/distritos.txt')

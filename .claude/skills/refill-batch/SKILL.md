@@ -80,7 +80,8 @@ If no commit was made, remove the worktree and report; do not open a PR.
 
 ```bash
 git push -u origin feat/refill-batch-<stamp>
-gh pr create --title "feat(data): refill N entities" --body-file "$OUT/body.md"
+T="feat(data): refill N entities"; grep -q '⚠️' "$OUT/body.md" && T="⚠️ $T"
+gh pr create --title "$T" --body-file "$OUT/body.md"
 ```
 
 Body: `OUT/body.md`, as written by step 4 (`--body-file "$OUT/body.md"`). One line per dispatched entity (a 🔒 one reads `🔒 private individual, not published`), nothing else: no research notes, no skipped ids (those only go in the final report).
@@ -88,7 +89,7 @@ Body: `OUT/body.md`, as written by step 4 (`--body-file "$OUT/body.md"`). One li
 
 ## 6. Merge (CI does it)
 
-Do not merge, and do not enable auto-merge. The `merge` job in `.github/workflows/check.yml` rebase-merges the PR by itself once `check` passes (it covers `feat/fill-batch-*` and `feat/refill-batch-*`). A CI failure leaves the PR open for a human.
+Do not merge, and do not enable auto-merge. The `merge` job in `.github/workflows/check.yml` rebase-merges the PR by itself once `check` passes (it covers `feat/fill-batch-*` and `feat/refill-batch-*`). A CI failure leaves the PR open for a human. So does a ⚠️ in the title or body: `apply_batch.py` marks an entity whose research left an old location out (the location is kept on the row), the title then starts with `⚠️ `, and the `merge` job skips the PR so the user reviews it.
 
 Then clean up: `cd "$(git rev-parse --git-common-dir)/.." && git worktree remove ../intern-quest-wt-refill-<stamp>`.
 

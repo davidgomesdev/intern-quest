@@ -348,6 +348,16 @@ def test_apply_row_refill_keeps_located_contacts():
     assert "data-loc" not in dup and check.check_row(dup) == []
 
 
+def test_apply_row_left_out():
+    pend = row(["🔄"] + FILLED_CELLS[1:], attr=' data-src="https://old.pt"')   # one old location: Cascais, Lisboa
+    porto = {"locations": [{"local": "Porto", "distrito": "Porto"}]}
+    assert [x["local"] for x in apply_row.left_out(pend, porto)] == ["Cascais"]
+    assert apply_row.left_out(pend, {"locations": [{"local": "Cascais", "distrito": "Lisboa"}]}) == []  # listed again
+    assert apply_row.left_out(pend, {**porto, "cleared": ["locations"]}) == []                        # dropped on purpose
+    assert apply_row.left_out(row(FILLED_CELLS), porto) == []                                          # not a refill
+    assert [x["local"] for x in apply_row.left_out(pend, {})] == ["Cascais"]                          # research found none
+
+
 def test_apply_row_refill_keeps_old_locations():
     old = row(["🔄", "0001", "X", "Lisboa", "Lisboa", "Rua A"] + FILLED_CELLS[6:])
     new = apply_row.build(old, {"locations": [{"local": "Porto", "distrito": "Porto"}]})
@@ -405,6 +415,21 @@ def test_apply_batch():
         assert r.returncode == 0 and r.stdout.startswith("e0001 ok"), r.stdout + r.stderr
         assert g("log", "-1", "--format=%s").strip() == "feat(data): refill e0001"
         assert open(os.path.join(out, "body.md"), encoding="utf-8").read().startswith("## Entities\n")
+        # refill whose research leaves the old location out: kept, entity and body flagged ⚠️
+        text = open(p, encoding="utf-8").read()
+        old = re.search(r'^<tr id="e0002".*$', text, re.M).group(0)
+        pend = row(["🔄", "0002", "Nome 0002", "Cascais", "Lisboa", "Rua A 1"] + [DESC, IND, IND, IND, IND], id_="e0002",
+                   attr=' data-src="https://a.pt/y"')
+        open(p, "w", encoding="utf-8").write(text.replace(old, pend))
+        g("commit", "-qam", "pend2")
+        with open(os.path.join(out, "e0002.json"), "w", encoding="utf-8") as f:
+            json.dump({"locations": [{"local": "Porto", "distrito": "Porto", "morada": "Rua P"}], "sources": ["https://a.pt/z"]}, f)
+        r = subprocess.run([sys.executable, os.path.join(HERE, "apply_batch.py"), "--refill", out, "0002"],
+                           cwd=d, capture_output=True, text=True)
+        assert r.returncode == 0 and r.stdout.startswith("e0002 ok ⚠️ kept 1 old location(s)"), r.stdout + r.stderr
+        body = open(os.path.join(out, "body.md"), encoding="utf-8").read()
+        assert body.startswith("> ⚠️ 1 entity kept old locations") and "Cascais · Rua A 1" in body, body
+        assert "Cascais" in open(p, encoding="utf-8").read()                    # the old location stays on the row
     finally:
         shutil.rmtree(d)
 

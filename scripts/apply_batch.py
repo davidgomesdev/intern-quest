@@ -8,6 +8,8 @@ Usage: scripts/apply_batch.py [--refill] OUT ID[:reason] ...
 
 Prints one line per id ("eID ok" / "eID private" / "eID FAILED: reason") and writes
 OUT/body.md (PR "## Entities" list) and OUT/report.tsv (id, nome, result).
+A refill that keeps old locations the research did not list marks that entity, and the body, with ⚠️:
+the PR title must then start with ⚠️ and CI does not auto-merge it.
 Any failed step resets that entity (git reset --hard HEAD) and goes on.
 A failed commit (hook/signing) aborts the batch: exit 3, error on stderr.
 """
@@ -89,10 +91,17 @@ def main(argv):
                 line, res = f'- {rid} ({n}): 🔒 private individual, not published', 'private'
             else:
                 line, res = f'- {rid} ({n}): ok, ' + (', '.join(src) or 'no sources found'), 'ok'
+                kept = apply_row.left_out(re.search(rf'^<tr id="{rid}"[ >].*$', html, re.M).group(0), d)
+                if kept:  # research left old locations out: kept, and the PR must wait for a human (CI skips ⚠️ PRs)
+                    where = '; '.join(' · '.join(filter(None, (x.get('local') or x.get('distrito'), x.get('morada')))) or '?' for x in kept)
+                    note = f'⚠️ kept {len(kept)} old location(s) the research did not list: {where}'
+                    line, res = f'{line} {note}', f'ok {note}'
         body.append(line)
         rows.append(f'{rid}\t{n}\t{res}')
         print(f'{rid} {res}')
-    (out / 'body.md').write_text('## Entities\n' + '\n'.join(body) + '\n', encoding='utf-8')
+    warn = sum('⚠️' in l for l in body)
+    head = f'> ⚠️ {warn} entit{"y" if warn == 1 else "ies"} kept old locations the research did not list. Review before merging.\n\n' if warn else ''
+    (out / 'body.md').write_text(head + '## Entities\n' + '\n'.join(body) + '\n', encoding='utf-8')
     (out / 'report.tsv').write_text('\n'.join(rows) + '\n', encoding='utf-8')
     return 0
 

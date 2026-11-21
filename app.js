@@ -72,6 +72,8 @@ function parse() {
     const val = i => (miss(c[i]) ? null : c[i].textContent);
     let data = {};
     try { data = JSON.parse(el.dataset.loc || '{}'); } catch { /* bad data-loc: fall back to the cells */ }
+    const obj = x => !!x && typeof x === 'object' && !Array.isArray(x), strs = x => (Array.isArray(x) ? x.filter(v => typeof v === 'string') : []);
+    if (!obj(data) || !Array.isArray(data.l) || !data.l.every(obj)) data = {}; // wrong shape: same as unparsable
     const locs = data.l?.length ? data.l.map(x => ({ local: x.local ?? null, distrito: x.distrito ?? null, morada: x.morada ?? null,
       telefone: x.telefone ?? null, email: x.email ?? null, main: !!x.main }))
       : [{ local: val(3), distrito: val(4), morada: val(5), telefone: val(10), email: val(9), main: false }];
@@ -79,7 +81,7 @@ function parse() {
     const areas = miss(c[6]) ? (c[6].firstElementChild ? ['desconhecido'] : []) : c[6].textContent.split(' ');
     return { el, id: el.id, n: +c[1].textContent, ok: ['✅', '🔄'].includes(c[0].textContent), pend: c[0].textContent === '🔄', priv: c[0].textContent === '🔒', removed: 'removed' in el.dataset,
       empty: Array.from(c).slice(3, 11).every(miss),
-      nome: c[2].textContent, locs, tels: data.t || [], mails: data.e || [], dists, dUnk: !dists.length && !!c[4].firstElementChild, areas,
+      nome: c[2].textContent, locs, tels: strs(data.t), mails: strs(data.e), dists, dUnk: !dists.length && !!c[4].firstElementChild, areas,
       kNome: norm(c[2].textContent), contacto: !!(val(8) || val(9) || val(10)), done: false,
       site: val(8) }; // raw text, kept for list exports
   });
@@ -157,7 +159,7 @@ function prefixDists(t) { // the distritos of a landline's prefix (21 / 22 are t
 function contacts(r, kind) { // phones / e-mails in the order of SPEC §4: the shown location's own first
   const f = shown(r)[0], own = f[kind];
   if (kind === 'email') return uniq([own, ...r.mails]);
-  const D = S.d || f.distrito, land = [], rest = [];
+  const D = S.d || (S.c && f.distrito), land = [], rest = [];
   for (const t of uniq(r.tels)) if (t !== own) { const ds = prefixDists(t); (ds ? land : rest).push([t, ds]); }
   const key = ds => (ds.includes(D) ? -1 : Math.min(...ds.map(d => RANK[d] ?? 99)));
   return uniq([own, ...land.sort((a, b) => key(a[1]) - key(b[1])).map(x => x[0]), ...rest.map(x => x[0])]);

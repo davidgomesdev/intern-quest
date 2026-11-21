@@ -635,6 +635,10 @@ def _pager(dom): return _text(dom, r'<nav class="pager"[^>]*>.*?<span>(.*?)</spa
 def _disabled(dom): return len(re.findall(r'data-p="(?:prev|next)"[^>]*disabled', dom))
 def _ids(dom):
     return re.findall(r'<tr id="(e\d+)"', dom.split('<tbody id="rows"', 1)[1].split("</tbody>", 1)[0])
+def _cell(dom, rid, i):
+    """Text of cell i (0-based, like the columns of a row) of row rid."""
+    tr = re.search(rf'<tr id="{rid}".*?</tr>', dom, re.S).group(0)
+    return re.sub(r"<[^>]+>", "", re.findall(r"<td[^>]*>(.*?)</td>", tr, re.S)[i])
 def _sort(dom, k):
     return re.search(rf'<th[^>]*data-k="{k}"[^>]*>', dom).group(0)
 
@@ -682,8 +686,8 @@ def test_lookup_embedded():
     assert list(json.loads(lk[len(embed.OPEN):-len("</script>")])) == check.DISTRITOS
 
 
-def _fixture():
-    with open(os.path.join(FIX, "rows.txt"), encoding="utf-8") as f:
+def _fixture(name="rows"):
+    with open(os.path.join(FIX, name + ".txt"), encoding="utf-8") as f:
         return f.read().rstrip("\n").split("\n")
 
 
@@ -732,6 +736,7 @@ SORTS = [ALL + "ord=nome&dir=desc", ALL + "ord=local&dir=asc", ALL + "ord=local&
 SMALL = [c[0] for c in CASES] + SORTS
 BIG = [ALL + h for h in ["", "p=2", "p=12", "p=999", "p=0", "p=-5", "p=abc", "pp=50&p=3", "pp=7", "pp=abc", "pp=0",
                          "p=2&nome=entidade%2001", "c=Vila%20do%20Conde", "d=Porto"]]
+LOCH = [ALL, ALL + "d=Porto", ALL + "d=Lisboa&c=Cascais", ALL + "d=Faro", ALL + "d=desconhecido"]  # on tests/rows-loc.txt
 ORPH = [ALL + "d=Lisboa", ALL + "d=Lisboa&c=Cascais", ALL]
 
 
@@ -750,8 +755,8 @@ def _edge_fixtures(fixture):
 SCENARIOS = {}
 
 
-def scenario(name, body, h="", seed=LISTS_SEED):
-    SCENARIOS[name] = (body, h, seed)
+def scenario(name, body, h="", seed=LISTS_SEED, fixture=None):
+    SCENARIOS[name] = (body, h, seed, fixture)  # fixture: a tests/ file name (rows-loc), or None for the generated rows
     return name
 
 
@@ -808,6 +813,8 @@ scenario("export", """const n = $('.nota'); n.value = '=1+1\\nsegunda'; n.dispat
   $('[data-act=emails]').click(); out.mails = out.copied;
   $('[data-act=csv]').click(); out.csv = out.blob; out.csvFile = out.file;
   $('[data-act=link]').click(); out.link = out.copied;""", "l=Favoritas")
+scenario("locexport", """$('[data-act=emails]').click(); out.mails = out.copied;
+  $('[data-act=csv]').click(); out.csv = out.blob;""", "l=L", seed="""JSON.stringify([["L", [["e0011", ""], ["e0012", ""], ["e0015", ""]]]])""", fixture="rows-loc")
 scenario("share", """out.banner = $('#partilha').textContent; out.shown = !$('#partilha').hidden;
   $('[data-act=shsave]').click(); out.gone = $('#partilha').hidden;""", "share=Amigos%3A0001,0003,9999,xx,0003")
 scenario("shskip", "$('[data-act=shskip]').click();", "share=Amigos%3A0001")
@@ -840,8 +847,9 @@ def _jobs(tmp, fixture):
     sweep("big", rows, BIG)
     sweep("orph", orph_rows, ORPH)
     sweep("badurl", bad_rows, [""])
-    for name, (body, h, seed) in SCENARIOS.items():
-        jobs.append(("lists:" + name, Page(tmp, rows, LISTS_JS.replace("%SEED%", seed).replace("%BODY%", body)).path, h, 20000))
+    sweep("loc", _fixture("rows-loc"), LOCH)
+    for name, (body, h, seed, fx) in SCENARIOS.items():
+        jobs.append(("lists:" + name, Page(tmp, _fixture(fx) if fx else rows, LISTS_JS.replace("%SEED%", seed).replace("%BODY%", body)).path, h, 20000))
     jobs.append(("trace", Page(tmp, rows, TRACE).path, "", 20000))
     with open(os.path.join(os.path.dirname(HERE), "app.js"), encoding="utf-8") as f:
         src = f.read()
@@ -1084,9 +1092,9 @@ def _part_lists_b():
     dom, out = R.lists("export")
     assert out["mails"] == "a@x.example" and out["csvFile"] == "favoritas.csv"
     rows = out["csv"].split("\r\n")
-    assert rows[0] == '﻿"Nº";"Nome";"Local";"Distrito";"Morada";"E-mail";"Telefone";"Website";"Seguimento";"Nota"'
-    assert rows[1] == '"2";"Entidade 002";"Amarante";"Porto";"Rua X 1";"a@x.example";"210 000 000";"https://x.example";"Por ver";"\'=1+1\nsegunda"'
-    assert rows[3] == '"5";"Entidade 005";"";"";"";"";"";"";"Por ver";""' and len(rows) == 4
+    assert rows[0] == '﻿"Nº";"Nome";"Local";"Distrito";"Distritos";"Morada";"E-mail";"Telefone";"Website";"Seguimento";"Nota"'
+    assert rows[1] == '"2";"Entidade 002";"Amarante";"Porto";"Porto";"Rua X 1";"a@x.example";"210 000 000";"https://x.example";"Por ver";"\'=1+1\nsegunda"'
+    assert rows[3] == '"5";"Entidade 005";"";"";"";"";"";"";"";"Por ver";""' and len(rows) == 4
     assert out["link"].endswith("#share=Favoritas%3A0002,0004,0005")
 
     dom, out = R.lists("share")
@@ -1119,7 +1127,39 @@ def _part_lists_b():
     assert out["tabs"] == ["Todas", "__proto__1", "ok1", "+ Nova lista"], out["tabs"]  # hostile names are plain names; bad ids and blank names dropped
 
 
-PAGE_PARTS = [_part_filters, _part_paging, _part_edge, _part_lists_a, _part_lists_b]
+def _part_locations():
+    R = _results()
+    if not R:
+        return
+    loc = R.sweep("loc", LOCH)
+    a, p, c, f, u = (loc(h) for h in LOCH)
+    assert _count(a) == "5 de 5 entidades, 5 com dados" and 'aria-label="A rever localizações"' in a  # 🔄 counts as filled
+    assert _cell(a, "e0011", 4).startswith("Por todo o país (10 distritos)") and "Todas as localizações" in a
+    assert _cell(a, "e0012", 4).startswith("Porto, Coimbra, Faro")  # rank order, 3 districts, no +N
+    assert _cell(a, "e0013", 4).startswith("Lisboa, Porto")  # two Lisboa sites count once
+    assert "(recomendado)" in _cell(a, "e0011", 10) and "É o contacto da sede da entidade." in a
+    assert "222 000 000" in _cell(a, "e0012", 10) and "(recomendado)" not in _cell(a, "e0012", 10)  # Porto prefix ranks above Faro's
+    assert "936 000 000" in _cell(a, "e0014", 10) and "(recomendado)" not in _cell(a, "e0014", 10)  # mobiles: first listed
+    assert _cell(a, "e0014", 4).startswith("Braga")  # the unknown Distrito is not counted
+    assert "geral@rede.example" in _cell(a, "e0011", 9) and "norte@rede.example" not in _cell(a, "e0011", 9)
+    assert "Outras localizações" in a and "Outros contactos" in a
+    assert _cell(p, "e0011", 4).startswith("Porto (+9)") and "222 000 002" in _cell(p, "e0011", 10)
+    assert "(recomendado)" in _cell(p, "e0011", 10) and "É o contacto da localização no distrito selecionado." in p
+    assert "222 000 000" in _cell(p, "e0012", 10) and "(recomendado)" not in _cell(p, "e0012", 10)  # a loose number: no tag
+    assert "e0014" not in _ids(p)
+    assert _ids(c) == ["e0013"] and "Cascais" in _cell(c, "e0013", 3) and "(recomendado)" in _cell(c, "e0013", 10)
+    assert "e0012" in _ids(f) and "289 000 000" in _cell(f, "e0012", 10)
+    assert "e0014" not in _ids(u)  # it has Braga
+
+    dom, out = R.lists("locexport")
+    assert out["mails"] == "geral@rede.example; info@gata.example", out["mails"]  # one address per entity
+    head, *lines = out["csv"].split("\r\n")
+    assert 'Distrito";"Distritos";"Morada"' in head
+    e11 = next(l for l in lines if l.startswith('"11"'))
+    assert '"Lisboa; Porto; Coimbra; Faro; Setúbal; Braga; Aveiro; Leiria; Santarém; Viseu"' in e11 and '"213 000 001"' in e11, e11
+
+
+PAGE_PARTS = [_part_filters, _part_paging, _part_edge, _part_lists_a, _part_lists_b, _part_locations]
 
 
 def test_page():

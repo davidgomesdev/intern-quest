@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """Apply researched rows, one commit per entity. Run from the batch worktree.
 
-Usage: scripts/apply_batch.py [--refill] OUT ID[:reason] ...
+Usage: scripts/apply_batch.py [--refill | --review] OUT ID[:reason] ...
   ID          apply OUT/eID.json (flags merged into adicional), check, commit "feat(data): fill eID"
   --refill    the rows are 🔄: commit "feat(data): refill eID" instead
   ID:reason   subagent already failed; recorded as FAILED, nothing applied
 
 Prints one line per id ("eID ok" / "eID private" / "eID FAILED: reason") and writes
 OUT/body.md (PR "## Entities" list) and OUT/report.tsv (id, nome, result).
-A refill that keeps old locations the research did not list marks that entity, and the body, with ⚠️:
-the PR title must then start with ⚠️ and CI does not auto-merge it.
+With --refill, an entity whose research leaves old locations out is not applied: it prints "eID held …"
+and goes to OUT/held.txt. Apply those with --review (implies --refill) on their own branch: the old locations
+stay on the row, OUT/body-review.md / report-review.tsv carry ⚠️, and CI does not auto-merge that PR.
 Any failed step resets that entity (git reset --hard HEAD) and goes on.
 A failed commit (hook/signing) aborts the batch: exit 3, error on stderr.
 """
@@ -68,18 +69,36 @@ def fill(rid, out, verb='fill'):
     return None
 
 
+def kept_note(rid, html, out):
+    """'⚠️ kept …' when this refill's research leaves old locations out (they stay on the row), else ''."""
+    f = out / f'{rid}.json'
+    m = re.search(rf'^<tr id="{rid}"[ >].*$', html, re.M)
+    if not (f.exists() and m):
+        return ''
+    kept = apply_row.left_out(m.group(0), json.loads(f.read_text(encoding='utf-8')))
+    where = '; '.join(' · '.join(filter(None, (x.get('local') or x.get('distrito'), x.get('morada')))) or '?' for x in kept)
+    return f'⚠️ kept {len(kept)} old location(s) the research did not list: {where}' if kept else ''
+
+
 def main(argv):
-    verb = 'refill' if '--refill' in argv else 'fill'
-    argv = [a for a in argv if a != '--refill']
+    verb = 'refill' if '--refill' in argv or '--review' in argv else 'fill'
+    review = '--review' in argv
+    argv = [a for a in argv if a not in ('--refill', '--review')]
     if len(argv) < 3:
         print(__doc__, file=sys.stderr)
         return 2
     out, html = pathlib.Path(argv[1]), pathlib.Path('index.html').read_text(encoding='utf-8')
-    body, rows = [], []
+    body, rows, held = [], [], []
     for arg in sorted(argv[2:]):
         rid, _, pre = arg.partition(':')
         rid = 'e' + rid.lstrip('e')
         n = nome(rid, html)
+        note = '' if pre or verb == 'fill' else kept_note(rid, html, out)
+        if note and not review:  # ponytail: held entities go to their own PR, so one ⚠️ never holds the clean ones
+            held.append(rid[1:])
+            rows.append(f'{rid}\t{n}\theld')
+            print(f'{rid} held {note}')
+            continue
         why = pre or fill(rid, out, verb)
         if why:
             run('git', 'reset', '--hard', 'HEAD')
@@ -91,20 +110,19 @@ def main(argv):
                 line, res = f'- {rid} ({n}): 🔒 private individual, not published', 'private'
             else:
                 line, res = f'- {rid} ({n}): ok, ' + (', '.join(src) or 'no sources found'), 'ok'
-                kept = apply_row.left_out(re.search(rf'^<tr id="{rid}"[ >].*$', html, re.M).group(0), d)
-                if kept:  # research left old locations out: kept, and the PR must wait for a human (CI skips ⚠️ PRs)
-                    where = '; '.join(' · '.join(filter(None, (x.get('local') or x.get('distrito'), x.get('morada')))) or '?' for x in kept)
-                    note = f'⚠️ kept {len(kept)} old location(s) the research did not list: {where}'
+                if note:
                     line, res = f'{line} {note}', f'ok {note}'
         body.append(line)
         rows.append(f'{rid}\t{n}\t{res}')
         print(f'{rid} {res}')
     warn = sum('⚠️' in l for l in body)
     head = f'> ⚠️ {warn} entit{"y" if warn == 1 else "ies"} kept old locations the research did not list. Review before merging.\n\n' if warn else ''
-    (out / 'body.md').write_text(head + '## Entities\n' + '\n'.join(body) + '\n', encoding='utf-8')
-    (out / 'report.tsv').write_text('\n'.join(rows) + '\n', encoding='utf-8')
+    tag = '-review' if review else ''
+    (out / f'body{tag}.md').write_text(head + '## Entities\n' + '\n'.join(body) + '\n', encoding='utf-8')
+    (out / f'report{tag}.tsv').write_text('\n'.join(rows) + '\n', encoding='utf-8')
+    if not review:
+        (out / 'held.txt').write_text(''.join(h + '\n' for h in held), encoding='utf-8')
     return 0
-
 
 if __name__ == '__main__':
     sys.exit(main(sys.argv))

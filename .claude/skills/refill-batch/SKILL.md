@@ -9,17 +9,25 @@ Two phases. Subagents (running `refill-entity`) only research and write `OUT/eID
 
 ## 1. Build the id list
 
-Given ids: zero-pad each to at least 4 digits (`7` → `0007`).
-Given a count N instead: take the first N pending (🔄) rows.
+First list the ids already in an open refill PR (a held review PR waits for the user, its rows are still 🔄 on `main`), so this run never researches them again:
 
 ```bash
-grep -o '^<tr id="e[0-9]*"[^>]*><td>🔄' index.html | head -N | grep -o '[0-9]\{4,\}'
+gh pr list --state open --limit 200 --json headRefName,body \
+  --jq '.[] | select(.headRefName | startswith("feat/refill-batch-")) | .body' \
+  | grep -o 'e[0-9]\{4,\}' | cut -c2- | sort -u > "$BUSY"   # BUSY=<scratchpad>/busy.txt
 ```
 
-Given nothing: take 5 random pending rows.
+Given ids: zero-pad each to at least 4 digits (`7` → `0007`), then drop any listed in `$BUSY` (report them as `in an open PR`).
+Given a count N instead: take the first N pending (🔄) rows not in an open PR.
 
 ```bash
-grep -o '^<tr id="e[0-9]*"[^>]*><td>🔄' index.html | sort -R | head -5 | grep -o '[0-9]\{4,\}'
+grep -o '^<tr id="e[0-9]*"[^>]*><td>🔄' index.html | grep -o '[0-9]\{4,\}' | grep -vxF -f "$BUSY" | head -N
+```
+
+Given nothing: take 5 random pending rows not in an open PR.
+
+```bash
+grep -o '^<tr id="e[0-9]*"[^>]*><td>🔄' index.html | grep -o '[0-9]\{4,\}' | grep -vxF -f "$BUSY" | sort -R | head -5
 ```
 
 ## 2. Keep only dispatchable ids
@@ -64,7 +72,9 @@ One call applies every id, in ascending order:
 scripts/apply_batch.py --refill "$OUT" 0001 0002 0003:"web search unavailable" ...
 ```
 
-Pass each dispatched id: bare if its subagent replied `ok` or `private`, `ID:reason` if it replied `FAILED: reason`. The script does the whole per-entity routine and prints one line per id (`eID ok` / `eID private` / `eID FAILED: reason`):
+Pass each dispatched id: bare if its subagent replied `ok` or `private`, `ID:reason` if it replied `FAILED: reason`. The script does the whole per-entity routine and prints one line per id (`eID ok` / `eID private` / `eID held ⚠️ …` / `eID FAILED: reason`):
+
+- an entity whose research leaves out an old location is **held**: not applied here, its id written to `OUT/held.txt`. It gets its own review PR in step 5b, so it never holds back the clean ones,
 
 - merges the JSON's `flags` into `adicional` as `Revisar: …` (review notes; they do not stop the commit),
 - `apply_row.py`, checks `git diff --numstat` is exactly `1  1  index.html`, `check.py index.html`, commit `feat(data): refill eID`, `check.py --diff HEAD~1`,
@@ -80,18 +90,34 @@ If no commit was made, remove the worktree and report; do not open a PR.
 
 ```bash
 git push -u origin feat/refill-batch-<stamp>
-T="feat(data): refill N entities"; grep -q '⚠️' "$OUT/body.md" && T="⚠️ $T"
-gh pr create --title "$T" --body-file "$OUT/body.md"
+gh pr create --title "feat(data): refill N entities" --body-file "$OUT/body.md"
 ```
 
 Body: `OUT/body.md`, as written by step 4 (`--body-file "$OUT/body.md"`). One line per dispatched entity (a 🔒 one reads `🔒 private individual, not published`), nothing else: no research notes, no skipped ids (those only go in the final report).
  GitHub calls can time out: retry a failed `push` or `gh` up to 3 times, waiting 10, 30, 60 seconds. If it still fails, stop and report the exact error; the worktree and branch stay for a human.
 
+Skip this step if every id was held (no commit on this branch); remove the worktree.
+
+## 5b. Review PR for held entities (only if `OUT/held.txt` is not empty)
+
+A second worktree and branch from `origin/main`, the same way as step 4, then apply only the held ids with `--review` (implies `--refill`; the old locations stay on the row and every line is marked ⚠️):
+
+```bash
+cd "$(git rev-parse --git-common-dir)/.."
+git worktree add -b feat/refill-batch-<stamp>-review ../intern-quest-wt-refill-<stamp>-review origin/main
+cd ../intern-quest-wt-refill-<stamp>-review
+scripts/apply_batch.py --review "$OUT" $(cat "$OUT/held.txt")
+git push -u origin feat/refill-batch-<stamp>-review
+gh pr create --title "⚠️ feat(data): refill M entities (review)" --body-file "$OUT/body-review.md"
+```
+
+M = the number of held ids. Same retry rule for `push` / `gh`. Report rows for held ids come from `OUT/report-review.tsv`.
+
 ## 6. Merge (CI does it)
 
-Do not merge, and do not enable auto-merge. The `merge` job in `.github/workflows/check.yml` rebase-merges the PR by itself once `check` passes (it covers `feat/fill-batch-*` and `feat/refill-batch-*`). A CI failure leaves the PR open for a human. So does a ⚠️ in the title or body: `apply_batch.py` marks an entity whose research left an old location out (the location is kept on the row), the title then starts with `⚠️ `, and the `merge` job skips the PR so the user reviews it.
+Do not merge, and do not enable auto-merge. The `merge` job in `.github/workflows/check.yml` rebase-merges the PR by itself once `check` passes (it covers `feat/fill-batch-*` and `feat/refill-batch-*`). A CI failure leaves the PR open for a human. The review PR from 5b never merges by itself: the `merge` job skips any PR with ⚠️ in its title or body, so the user reviews it and merges it.
 
-Then clean up: `cd "$(git rev-parse --git-common-dir)/.." && git worktree remove ../intern-quest-wt-refill-<stamp>`.
+Then clean up both worktrees: `cd "$(git rev-parse --git-common-dir)/.." && git worktree remove ../intern-quest-wt-refill-<stamp>` (and `…-review` if made).
 
 ## 7. Report
 

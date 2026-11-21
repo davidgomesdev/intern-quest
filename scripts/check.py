@@ -199,10 +199,16 @@ def check_file(path):
 ROWID = re.compile(r'^<tr id="e(\d+)"')
 FLAG = ' data-removed="1"'
 SRC = re.compile(r' data-src="([^"<>]*)"')
+BATCH = ('feat/fill-batch-', 'feat/refill-batch-')
 
 
 def _bare(l):
     return SRC.sub('', l.replace(FLAG, ''))
+
+
+def _unloc(l):
+    """A fill may change data-loc (a refill); a sync may not."""
+    return LOC_ATTR.sub('', l)
 
 
 def _rid(line):
@@ -231,19 +237,30 @@ def check_diff(diff_text, changed_files, branch):
         return errs
     pairs = list(zip(rm, add))
     fills = (len(rm) == len(add) and len({_rid(l) for l in rm}) == len(rm)
-             and all(_rid(a) == _rid(b) and _bare(a) != _bare(b)
+             and all(_rid(a) == _rid(b) and _unloc(_bare(a)) != _unloc(_bare(b))
                      for a, b in pairs))
     if fills:
         errs += [f'non-row line of index.html changed: {l[:60]}' for l in other]
         errs += [f'file changed besides index.html: {f}' for f in changed_files
                  if f != 'index.html']
         for a, b in pairs:
-            errs += _entity(a, b, branch if len(pairs) == 1 else None)
+            errs += _entity(a, b, branch if len(pairs) == 1 else None,
+                            bool(branch) and branch.startswith(BATCH))
         return errs
     return errs + _sync(rm, add)
 
 
-def _entity(old, new, branch):
+def _migration(oc, nc, m, n):
+    """One-off shapes, never on batch branches: ✅ -> 🔄 (status only), or ✅ without sources -> ⬜."""
+    if oc[0] != '✅':
+        return False
+    if nc[0] == '🔄':
+        return n.group(0) == m.group(0).replace('<td>✅</td>', '<td>🔄</td>', 1)
+    return (nc[0] == '⬜' and SRC.search(m.group(2)) is None and not (SRC.search(n.group(2)) or LOC_ATTR.search(n.group(2)))
+            and nc[1:3] == oc[1:3] and not any(nc[3:]))
+
+
+def _entity(old, new, branch, batch=False):
     rid = _rid(new)
     errs = [f'e{rid}: {e}' for e in check_row(new)]
     m = ROW.match(old)
@@ -251,7 +268,7 @@ def _entity(old, new, branch):
     if not (m and n):
         return errs or [f'e{rid}: old row is malformed']
     oc, nc = CELLS.findall(m.group(3)), CELLS.findall(n.group(3))
-    if nc[0] not in ('✅', '🔒'):
+    if nc[0] not in ('✅', '🔒') and (batch or not _migration(oc, nc, m, n)):
         errs.append(f'e{rid}: new row must be ✅ or 🔒')
     if oc[2] != nc[2]:
         errs.append(f'e{rid}: Nome changed')
@@ -269,7 +286,7 @@ def _sync(rm, add):
     new = {_rid(l): l for l in add}
     for rid, l in new.items():
         if rid in old:
-            if _bare(l) != _bare(old[rid]) or l == old[rid]:
+            if _bare(l) != _bare(old[rid]) or l == old[rid]:  # _bare keeps data-loc: a sync may not change it
                 errs.append(f'e{rid}: existing row changed beyond data-removed')
         else:
             if not l.startswith(f'<tr id="e{rid}"><td>⬜</td>'):

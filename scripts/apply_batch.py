@@ -44,6 +44,8 @@ def fill(rid, out, verb='fill'):
     if not f.exists():
         return f'no {f.name}'
     d = json.loads(f.read_text(encoding='utf-8'))
+    if verb == 'refill' and not d.get('private') and not d.get('sources'):  # ponytail: no page read = nothing verified; the row stays 🔄
+        return 'NOOP: no source read (page empty or unrendered?)'
     if d.get('flags'):
         note = 'Revisar: ' + '; '.join(d['flags'])
         d['adicional'] = '; '.join(filter(None, [d.get('adicional'), note]))

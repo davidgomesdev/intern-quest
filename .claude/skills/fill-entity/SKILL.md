@@ -93,7 +93,7 @@ Write `OUT/eID.json` with the Write tool. Plain values, no HTML, no escaping, no
   "areas": ["justica"],
   "adicional": "Apoio a vítimas de crime",
   "website": "https://www.apav.pt",
-  "sources": ["https://www.apav.pt/apav_v3/index.php/pt/contactos"]
+  "sources": ["https://apav.pt/contactos"]
 }
 ```
 

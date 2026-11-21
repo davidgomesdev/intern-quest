@@ -415,6 +415,15 @@ def test_apply_batch():
         assert r.returncode == 0 and r.stdout.startswith("e0001 ok"), r.stdout + r.stderr
         assert g("log", "-1", "--format=%s").strip() == "feat(data): refill e0001"
         assert open(os.path.join(out, "body.md"), encoding="utf-8").read().startswith("## Entities\n")
+        # refill that read no source: FAILED, row stays 🔄
+        open(os.path.join(out, "e0001.json"), "w", encoding="utf-8").write("{}")
+        text = open(p, encoding="utf-8").read()
+        open(p, "w", encoding="utf-8").write(text.replace("<td>✅</td>", "<td>🔄</td>", 1))
+        g("commit", "-qam", "pend0")
+        r = subprocess.run([sys.executable, os.path.join(HERE, "apply_batch.py"), "--refill", out, "0001"],
+                           cwd=d, capture_output=True, text=True)
+        assert r.stdout.startswith("e0001 FAILED: NOOP"), r.stdout + r.stderr
+        assert "<td>🔄</td>" in open(p, encoding="utf-8").read().split("\n")[0]
         # refill whose research leaves the old location out: kept, entity and body flagged ⚠️
         text = open(p, encoding="utf-8").read()
         old = re.search(r'^<tr id="e0002".*$', text, re.M).group(0)

@@ -36,6 +36,8 @@ The search tool is US-only. A bare Portuguese name returns Brazilian pages and P
 4. If standard mode returns nothing useful, retry the same query in extended mode before giving up.
 5. Directories (einforma, Doctoralia, Portal da Saúde Mental) usually point to the entity's own site: open that site for the values.
 
+If a locations or contacts page has under ~1500 characters of text once tags are stripped, or only a JS shell (empty `<div id="root">`, `/assets/*.js`), it did not render: look in its linked script for a data endpoint, else search for the entity's delegações / pólos; if still nothing, do not report `ok`, report `FAILED: unrendered <url>`.
+
 Start from the `data-src` URLs: open them first and follow them to the entity's own locations page ("onde estamos", "contactos", "delegações"). Search only when those sources lead nowhere (dead link, wrong entity). Then prefer the entity's own website, then official directories (SNS, Carta Social, câmara municipal). Open pages to read them. Do not guess from memory.
 
 Collect, using only what a page states. A dead link or a value no page confirms is not a contradiction: keep the existing value and its source. An entity may work from several places: research **every location** it lists (its "onde estamos", "contactos" or "delegações" page), no cap. Opening pages is not a search; the budget below is unchanged.
@@ -95,7 +97,7 @@ Write `OUT/eID.json` with the Write tool. Plain values, no HTML, no escaping, no
   "areas": ["justica"],
   "adicional": "Apoio a vítimas de crime",
   "website": "https://www.apav.pt",
-  "sources": ["https://www.apav.pt/apav_v3/index.php/pt/contactos"]
+  "sources": ["https://apav.pt/contactos"]
 }
 ```
 
@@ -105,7 +107,7 @@ Write `OUT/eID.json` with the Write tool. Plain values, no HTML, no escaping, no
 - `locations`: one entry per place the entity lists, in any order (`apply_row.py` orders them: `main` first, then by Distrito). Each entry holds only the keys of the per-location table; `main` is `true` or left out. A single-place entity has one entry. `[]` if you found no location.
 - `telefones`, `emails`: lists of contacts not tied to an address; `[]` if none.
 - `areas`: slugs from the list above only, no duplicates; `[]` if none fit.
-- `sources`: every page (locations page included) you took a value from, as full `http(s)` URLs; `[]` if you found nothing. They are added to the row's existing `data-src` and shown on the site in a popup on the ✅ icon.
+- `sources`: every page (locations page included) you took a value from or confirmed a value on, as full `http(s)` URLs; `[]` only if you read no page. An empty `sources` on a refill makes the orchestrator reject it (`NOOP`) and the row stays 🔄. They are added to the row's existing `data-src` and shown on the site in a popup on the ✅ icon.
 - Private individual (🔒): write only `{"private": true}`. `apply_row.py` then writes a 🔒 row with every data cell a placeholder and no `data-src`; any other keys are ignored.
 - Fields still follow the formats in the table (URL starts with `http(s)://`, phone `+351 212 345 678` style).
 

@@ -685,7 +685,7 @@ def _text(dom, pat):
     return re.sub(r"<[^>]+>", "", m.group(1)) if m else None
 
 
-def _count(dom): return re.sub(r' \((\d+ ainda por preencher|algumas são pessoas [^)]*)\)$', '', _text(dom, r'<p id="count"[^>]*>(.*?)</p>'))  # the coverage hint is checked in _part_filters
+def _count(dom): return re.sub(r' \(\d+ ainda por preencher\)$', '', _text(dom, r'<p id="count"[^>]*>(.*?)</p>'))  # the coverage hint is checked in _part_filters
 def _pending(dom): return re.search(r' \((\d+) ainda por preencher\)$', _text(dom, r'<p id="count"[^>]*>(.*?)</p>'))
 def _ativos(dom): return _text(dom, r'<span id="ativos">(.*?)</span>')
 def _pager(dom): return _text(dom, r'<nav class="pager"[^>]*>.*?<span>(.*?)</span>')
@@ -1006,8 +1006,9 @@ def _part_filters():
     small = R.sweep("small", SMALL)
     for h, want, act in CASES:
         dom = small(h)
+        if "estado=todos" in h: want = want.replace(" entidades", " entidades*")
         assert _count(dom) == want, (h, _count(dom), want)
-        assert ("pessoas singulares" in _text(dom, r'<p id="count"[^>]*>(.*?)</p>')) == ("estado=todos" in h), h
+        assert ("hidden" not in re.search(r'<p id="nota-priv"[^>]*>', dom)[0]) == ("estado=todos" in h), h
         assert _ativos(dom) == act, (h, _ativos(dom))
     assert _pending(small("")).group(1) == "1" and not _pending(small("estado=todos"))  # default hides 1 ⬜ row; asking for all drops the hint
     for h in ["ord=__proto__", "ord=constructor", "a=constructor"]:
@@ -1051,7 +1052,7 @@ def _part_paging():
     _big = R.sweep("big", BIG)
     big = lambda h="": _big(ALL + h)
     dom = big()
-    assert _count(dom) == "120 de 120 entidades, 60 com dados" and _pager(dom) == "Página 1 de 12"  # default 10 per page
+    assert _count(dom) == "120 de 120 entidades*, 60 com dados" and _pager(dom) == "Página 1 de 12"  # default 10 per page
     assert len(_ids(dom)) == 10 and _ids(dom)[0] == "e0001" and _disabled(dom) == 2
     assert 'data-p="prev"' in dom and re.findall(r'data-p="prev"[^>]*disabled', dom)
     assert not re.findall(r'data-p="next"[^>]*disabled', dom)
@@ -1203,7 +1204,7 @@ def _part_locations():
         return
     loc = R.sweep("loc", LOCH)
     a, p, c, f, u = (loc(h) for h in LOCH)
-    assert _count(a) == "5 de 5 entidades, 5 com dados" and 'aria-label="A rever localizações"' in a  # 🔄 counts as filled
+    assert _count(a) == "5 de 5 entidades*, 5 com dados" and 'aria-label="A rever localizações"' in a  # 🔄 counts as filled
     assert _cell(a, "e0011", 4).startswith("Por todo o país (10 distritos)") and "Todas as localizações" in a
     assert _cell(a, "e0012", 4).startswith("Porto, Coimbra, Faro")  # rank order, 3 districts, no +N
     assert _cell(a, "e0013", 4).startswith("Lisboa, Porto")  # two Lisboa sites count once

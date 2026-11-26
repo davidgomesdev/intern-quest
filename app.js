@@ -63,8 +63,7 @@ const LOC = {}; // distrito -> Set of locais (from lookup/, embedded in index.ht
 const RANK = {}, PX = {}; // distrito -> rank (key order of the lookup); phone prefix -> distritos
 
 const norm = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();
-const defaults = () => ({ nome: '', c: '', d: '', a: [], st: [], l: '', estado: 'ok', vazias: false, contacto: false, ord: 'n', dir: 'asc', p: 1, pp: PP });
-const FLAGS = ['vazias', 'contacto']; // on/off filters: stored as "1" in the hash, absent when off
+const defaults = () => ({ nome: '', c: '', d: '', a: [], st: [], l: '', estado: 'ok', excluir: true, contacto: false, ord: 'n', dir: 'asc', p: 1, pp: PP });
 
 function parse() {
   ROWS = Array.from(tbody.rows, el => {
@@ -105,7 +104,7 @@ function fillLocais(d) { // Local depends on Distrito
 function readState() {
   const q = new URLSearchParams(location.hash.slice(1)), g = k => q.get(k) || '';
   S = { ...defaults(), nome: g('nome'), c: g('c'), d: g('d'), l: LST.has(g('l')) ? g('l') : '',
-    a: g('a').split(',').filter(k => Object.hasOwn(AREAS, k)), st: g('st').split(',').filter(k => Object.hasOwn(STATUS, k)), vazias: g('vazias') === '1', contacto: g('contacto') === '1',
+    a: g('a').split(',').filter(k => Object.hasOwn(AREAS, k)), st: g('st').split(',').filter(k => Object.hasOwn(STATUS, k)), excluir: g('vazias') !== '1' && g('excluir') !== '0', contacto: g('contacto') === '1', // vazias=1: old links that showed them
     estado: ['todos', 'todo'].includes(g('estado')) ? g('estado') : 'ok',
     ord: Object.hasOwn(KEY, g('ord')) ? g('ord') : 'n', dir: g('dir') === 'desc' ? 'desc' : 'asc', p: parseInt(g('p'), 10) || 1,
     pp: SIZES.includes(+g('pp')) ? +g('pp') : PP };
@@ -118,8 +117,9 @@ function readState() {
 function writeState() {
   const D = defaults(), q = new URLSearchParams();
   for (const k in D) {
-    const v = LISTS.includes(k) ? S[k].join(',') : FLAGS.includes(k) ? (S[k] ? '1' : '') : S[k];
-    if (v !== (LISTS.includes(k) || FLAGS.includes(k) ? '' : D[k])) q.set(k, v);
+    if (LISTS.includes(k)) { if (S[k].length) q.set(k, S[k].join(',')); }
+    else if (typeof D[k] === 'boolean') { if (S[k] !== D[k]) q.set(k, S[k] ? '1' : '0'); } // on/off filters: "1" or "0", absent at the default
+    else if (S[k] !== D[k]) q.set(k, S[k]);
   }
   if (SHARE) q.set('share', SHARE.raw); // keep a pending shared list in the URL until it is saved or ignored
   const h = q.toString().replace(/%2C/g, ',');
@@ -128,7 +128,7 @@ function writeState() {
 
 function toForm() {
   const f = form.elements;
-  f.nome.value = S.nome; f.d.value = S.d; fillLocais(S.d); f.c.value = S.c; f.estado.value = S.estado; f.vazias.checked = S.vazias; f.contacto.checked = S.contacto;
+  f.nome.value = S.nome; f.d.value = S.d; fillLocais(S.d); f.c.value = S.c; f.estado.value = S.estado; f.excluir.checked = S.excluir; f.contacto.checked = S.contacto;
   $('#pp').value = S.pp;
   form.querySelectorAll('[name=a],[name=st]').forEach(i => { i.checked = S[i.name].includes(i.value); });
 }
@@ -136,7 +136,7 @@ function toForm() {
 function fromForm() {
   const f = form.elements;
   if (f.d.value !== S.d) fillLocais(f.d.value); // resets Local
-  Object.assign(S, { nome: f.nome.value, c: f.c.value, d: f.d.value, estado: f.estado.value, vazias: f.vazias.checked, contacto: f.contacto.checked,
+  Object.assign(S, { nome: f.nome.value, c: f.c.value, d: f.d.value, estado: f.estado.value, excluir: f.excluir.checked, contacto: f.contacto.checked,
     a: Array.from(form.querySelectorAll('[name=a]:checked'), i => i.value),
     st: Array.from(form.querySelectorAll('[name=st]:checked'), i => i.value), p: 1 });
 }
@@ -176,7 +176,7 @@ function matches(r, q) {
     && (!S.st.length || S.st.includes(stOf(r)))
     && (!S.a.length || S.a.some(a => r.areas.includes(a)))
     && (S.l ? LST.get(S.l).has(r.id) // inside a list every member shows, filled or not
-      : ((q.estado || S.estado) === 'todos' || ((q.estado || S.estado) === 'ok' ? r.ok : !r.ok && !r.priv)) && (S.vazias || !(r.ok && r.empty)))
+      : ((q.estado || S.estado) === 'todos' || ((q.estado || S.estado) === 'ok' ? r.ok : !r.ok && !r.priv)) && (!S.excluir || !(r.ok && r.empty)))
     && !r.removed && (!S.contacto || r.contacto);
 }
 
@@ -324,7 +324,7 @@ function renderCount(list, last) {
     p.querySelector('[data-p=prev]').disabled = S.p <= 1;
     p.querySelector('[data-p=next]').disabled = S.p >= last;
   });
-  const active = (S.nome ? 1 : 0) + (S.c || S.d ? 1 : 0) + S.a.length + S.st.length + (S.estado !== 'ok') + S.vazias + S.contacto;
+  const active = (S.nome ? 1 : 0) + (S.c || S.d ? 1 : 0) + S.a.length + S.st.length + (S.estado !== 'ok') + !S.excluir + S.contacto;
   $('#ativos').textContent = active ? `(${active} ${active > 1 ? 'ativos' : 'ativo'})` : '';
   const bare = !!S.l && !LST.get(S.l).size; // a list with nothing in it gets its own message
   $('#vazio').hidden = list.length > 0 || bare;
@@ -345,7 +345,7 @@ function followUp() { // banner: note statuses set 5+ days ago
   for (const r of due) {
     const days = bizDays(SAVED[r.id].t), li = el('li');
     li.dataset.st = stOf(r);
-    li.append(link(`#nome=${encodeURIComponent(r.nome)}&estado=todos&vazias=1`, r.nome), el('span', '', ` · ${STATUS[stOf(r)]}, há ${days} dias úteis`));
+    li.append(link(`#nome=${encodeURIComponent(r.nome)}&estado=todos&excluir=0`, r.nome), el('span', '', ` · ${STATUS[stOf(r)]}, há ${days} dias úteis`));
     ul.append(li);
   }
   box.replaceChildren(el('strong', '', `🔔 ${due.length} ${due.length > 1 ? 'entidades precisam' : 'entidade precisa'} de seguimento`), ul);

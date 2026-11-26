@@ -880,7 +880,7 @@ scenario("garbage", "out.shown = !$('#partilha').hidden;", "share=garbage")
 IMPORT = """const dt = new DataTransfer(), file = new File([JSON.stringify(%FILE%)], 'l.json'); dt.items.add(file);
   $('#imp-f').files = dt.files; $('#imp-f').dispatchEvent(new Event('change'));
   for (let i = 0; i < 400 && !out.alert; i++) { await tick(); await file.text(); }  // reading the file takes real time, not virtual: also do a real read per turn, and allow plenty of turns on a slow runner"""
-scenario("backup", """SAVED.e0001 = {s: 'visto', t: 1000}; SAVED.e0002 = {s: 'email', t: 5000};
+scenario("backup", """SAVED.e0001 = {s: 'visto', t: 1000}; SAVED.e0002 = {s: 'email', t: 5000}; localStorage.setItem('iq-status', JSON.stringify(SAVED));
   $('[data-act=exp]').click(); out.backup = out.blob; out.file2 = out.file;
   """ + IMPORT.replace("%FILE%", """{listas: [['Importada', [['e0001', 'x'], ['bad', 'y']]], ['Favoritas', [['e0003', '']]]],
     estados: {e0001: {s: 'email', t: 2000}, e0002: {s: 'visto', t: 4000}, e0003: {s: 'nope', t: 1}, bad: {s: 'visto', t: 1}}}"""))  # newer wins; old, bad status and bad id dropped
@@ -956,6 +956,22 @@ scenario("ownlink", """SAVED.c00001 = {s: 'visto', t: 1000}; $('[data-act=link]'
          "l=Favoritas", seed=own_seed(own("c00001", "Minha", 1), lists=OWNLINKS))
 scenario("ownlinked", "", "copia=" + quote(json.dumps({"listas": [["R", [["c00001", "n"], ["e0001", ""]]]], "estados": {"c00001": {"s": "visto", "t": 7}}, "proprias": [own("c00009", "De fora", 3)]})),
          seed=own_seed(own("c00001", "Local", 1)))
+
+# Two tabs: the "other tab" is a direct write to localStorage, which this page hears nothing about unless the test
+# also dispatches the storage event the browser would send.
+TWO = own_seed(ONE, own("c00002", "Segunda", 2), lists=OWNLIST)
+OTHERTAB = """localStorage.setItem('iq-lists', JSON.stringify([["Favoritas", [["c00001", "nota"], ["c00002", "enviei CV"]]], ["De outro separador", []]]));
+  localStorage.setItem('iq-status', JSON.stringify({c00002: {s: 'email', t: 5}}));"""
+scenario("ownreuse", OWNFORM + """window.confirm = () => true; $('#c00001 [data-act=delown]').click(); $('[data-act=add]').click(); set('nome', 'Nova'); send();""", seed=own_seed(ONE))
+scenario("ownreimport", "window.confirm = () => true; $('#c00001 [data-act=delown]').click(); " + own_import({"listas": [], "proprias": [own("c00001", "De fora", 9)]}), seed=own_seed(ONE))
+scenario("ownstaleedit", OWNFORM + """$('#c00001 [data-act=edit]').click(); localStorage.setItem('iq-custom', '[]');
+  set('nome', 'Renomeada'); send(); out.open = D().open; out.err = $('#propria-erro').textContent;""", seed=own_seed(ONE))
+scenario("ownstaledel", "window.confirm = () => true; " + OTHERTAB + " $('#c00001 [data-act=delown]').click();", seed=TWO)
+scenario("ownstaleimport", OTHERTAB + own_import({"listas": [["Importada", []]]}), seed=TWO)
+scenario("ownstorage", OTHERTAB + """localStorage.setItem('iq-custom', JSON.stringify([%B%]));
+  dispatchEvent(new StorageEvent('storage', {key: 'iq-custom'}));
+  out.tabs = $$('#listas .tab').map(b => b.textContent); out.gone = !$('#c00001'); out.st = $('#c00002 select').value;""".replace("%B%", json.dumps(own("c00002", "Segunda", 2))), seed=TWO)
+scenario("ownlookup", "", seed=own_seed(own("c00001", "Antiga", 1, distrito="Narnia")))
 
 
 def _jobs(tmp, fixture):
@@ -1345,6 +1361,22 @@ def _part_own():
     assert "não vão no link" in out["a1"] and "Exportar cópia" in out["a2"] and "só tem" in out["a3"] and out["only"] == "", out
     dom, out = R.lists("ownlinked")
     assert stored(out)[-1] == ["R", [["e0001", ""]]] and names(out) == [("c00001", "Local")] and json.loads(out["status"] or "{}") == {}, out
+
+    kept = [["c00002", "enviei CV"]]
+    dom, out = R.lists("ownreuse")  # a deleted id is never handed out again
+    assert names(out) == [("c00002", "Nova")], out
+    dom, out = R.lists("ownreimport")
+    assert names(out) == [("c00002", "De fora")], out
+    dom, out = R.lists("ownstaleedit")  # deleted in another tab: say so, write nothing
+    assert out["open"] and "apagada" in out["err"] and json.loads(out["own"]) == [], out
+    dom, out = R.lists("ownstaledel")
+    assert stored(out) == [["Favoritas", kept], ["De outro separador", []]] and json.loads(out["status"]) == {"c00002": {"s": "email", "t": 5}}, out
+    dom, out = R.lists("ownstaleimport")
+    assert ["De outro separador", []] in stored(out) and kept[0] in stored(out)[0][1] and json.loads(out["status"]) == {"c00002": {"s": "email", "t": 5}}, out
+    dom, out = R.lists("ownstorage")
+    assert "De outro separador0" in out["tabs"] and out["gone"] and out["st"] == "email", out
+    dom, out = R.lists("ownlookup")  # a value the lookup no longer knows is kept aside before a save can drop it
+    assert "Narnia" in (out["bad"] or ""), out
 
 
 PAGE_PARTS = [_part_filters, _part_paging, _part_edge, _part_lists_a, _part_lists_b, _part_locations, _part_own]

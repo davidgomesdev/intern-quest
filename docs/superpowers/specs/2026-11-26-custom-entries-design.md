@@ -22,7 +22,7 @@ OPP lists only the entities that have a protocol with it. A visitor also applies
 
 ### Data
 - `localStorage` key `iq-custom`: array of `{id, criado, editado, nome, local, distrito, morada, areas, adicional, website, email, telefone}`.
-- `id` is `c` plus 5 digits (`c00001`), next = highest in use + 1. Lists, notes and statuses accept both `e…` and `c…` ids.
+- `id` is `c` plus 5 digits (`c00001`), next = highest ever given out + 1 (kept in `iq-custom-last`), so a deleted id is never reused. Changed after the branch review: with reuse, a second open tab could delete or overwrite the wrong entry. Lists, notes and statuses accept both `e…` and `c…` ids.
 - `nome` is required (trimmed, not blank); everything else is optional. **[CALL]** Distrito and Local are dropdowns from the lookup lists, so filters match them; Áreas are checkboxes; the rest is free text with length caps. Website must be http(s) (`https://` is added when there is no scheme); e-mail uses the browser's e-mail validation.
 - Rows are built with DOM APIs and `textContent`, never from HTML strings.
 

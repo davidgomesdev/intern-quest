@@ -55,7 +55,7 @@ function mergeOwn(incoming) { // `criado` says whether two entries are the same 
         map.set(e.id, list[i].id);
         if (e.editado > list[i].editado) list[i] = { ...e, id: list[i].id };
       } else {
-        const id = list.some(x => x.id === e.id) ? nextOwnId(list) : e.id;
+        const id = idNum(e) <= lastOwn() || list.some(x => x.id === e.id) ? nextOwnId(list) : e.id; // taken now or in the past
         map.set(e.id, id);
         list.push({ ...e, id });
       }
@@ -124,14 +124,24 @@ function loadOwn() { // what cannot be read is copied aside first, so the next s
   if (raw == null) return [];
   try { data = JSON.parse(raw); } catch { /* not JSON */ }
   const list = Array.isArray(data) ? data.map(cleanEntry) : [];
-  if (!Array.isArray(data) || list.includes(null)) try { localStorage.setItem(OWN_KEY + '-bad', raw); } catch { /* storage full or blocked */ }
+  const lossy = (e, i) => !e || ['distrito', 'local', 'website', 'email'].some(k => data[i][k] && !e[k]); // e.g. a Local later renamed in lookup/
+  if (!Array.isArray(data) || list.some(lossy)) try { localStorage.setItem(OWN_KEY + '-bad', raw); } catch { /* storage full or blocked */ }
   return list.filter(Boolean);
 }
 
-function writeOwn(change) { // re-reads first, so entries added in another tab survive; false if the browser refused
-  try { localStorage.setItem(OWN_KEY, JSON.stringify(change(loadOwn()))); return true; } catch { return false; }
+const idNum = e => +e.id.slice(1);
+function lastOwn() { // the highest number ever given out here
+  try { return +localStorage.getItem(OWN_KEY + '-last') || 0; } catch { return 0; }
 }
-const nextOwnId = list => 'c' + String(1 + Math.max(0, ...list.map(e => +e.id.slice(1)))).padStart(5, '0');
+function writeOwn(change) { // re-reads first, so entries added in another tab survive; false if the browser refused
+  try {
+    const before = loadOwn(), had = before.map(idNum), after = change(before);
+    localStorage.setItem(OWN_KEY + '-last', Math.max(lastOwn(), ...had, ...after.map(idNum)));
+    localStorage.setItem(OWN_KEY, JSON.stringify(after));
+    return true;
+  } catch { return false; }
+}
+const nextOwnId = list => 'c' + String(1 + Math.max(lastOwn(), ...list.map(idNum))).padStart(5, '0');
 const byId = (a, b) => a.id.localeCompare(b.id);
 
 function reloadOwn() { // rebuild the custom rows from storage
@@ -142,6 +152,18 @@ function reloadOwn() { // rebuild the custom rows from storage
   form.elements.c.value = c;
   S.d = form.elements.d.value; S.c = form.elements.c.value;
   if (!ROWS.some(r => r.own)) S.minhas = false;
+}
+
+function refresh() { // take what is stored now (another tab may have written it); what cannot be read stays as it is
+  try { SAVED = JSON.parse(localStorage.getItem('iq-status')) || {}; } catch { /* keep */ }
+  const old = LST;
+  try {
+    const data = JSON.parse(localStorage.getItem('iq-lists') || '[]');
+    LST = new Map(); mergeLists(data);
+  } catch { LST = old; }
+  reloadOwn();
+  if (S.l && !LST.has(S.l)) S.l = '';
+  if (PICK && !BYID.has(PICK)) PICK = '';
 }
 
 function ownLocais(d) { // the dialog's Local list depends on its Distrito
@@ -173,6 +195,7 @@ function saveOwnForm(ev) {
   if (!check) return err('Escreve o nome da entidade.');
   if (typed.website.trim() && !check.website) return err('Website inválido. Usa um endereço como exemplo.pt.');
   if (typed.email.trim() && (!check.email || !f.elements.email.checkValidity())) return err('E-mail inválido.');
+  if (EDIT && !loadOwn().some(x => x.id === EDIT)) return err('Esta entidade foi apagada noutro separador.');
   const ok = writeOwn(list => {
     const old = list.find(x => x.id === EDIT), now = Date.now();
     const id = EDIT || nextOwnId(list);
@@ -187,6 +210,7 @@ function deleteOwn(id) {
   const r = BYID.get(id);
   if (!confirm(`Apagar «${r.nome}»? O estado e as notas desta entidade também são apagados.`)) return;
   if (!writeOwn(list => list.filter(x => x.id !== id))) return alert('Não apagada: o navegador bloqueou o armazenamento.');
+  refresh(); // the lists and statuses written below must start from what is stored now
   delete SAVED[id];
   try { localStorage.setItem('iq-status', JSON.stringify(SAVED)); } catch { /* storage full or blocked */ }
   for (const m of LST.values()) m.delete(id);
@@ -777,7 +801,7 @@ $('#imp-f').addEventListener('change', async e => {
   const f = e.target.files[0];
   e.target.value = '';
   if (!f) return;
-  try { mergeBackup(JSON.parse(await f.text())); reloadOwn(); update(); alert('Cópia importada.'); }
+  try { const data = JSON.parse(await f.text()); refresh(); mergeBackup(data); reloadOwn(); update(); alert('Cópia importada.'); }
   catch (err) { alert(err.message === NOT_SAVED ? 'Não importado: o navegador bloqueou o armazenamento.' : 'Ficheiro inválido. Usa um ficheiro exportado daqui.'); }
 });
 
@@ -794,6 +818,7 @@ document.addEventListener('click', e => {
   $('#count').scrollIntoView();
 });
 window.addEventListener('hashchange', () => { readState(); update(); });
+window.addEventListener('storage', e => { if ([null, 'iq-lists', 'iq-status', OWN_KEY].includes(e.key)) { refresh(); update(); } }); // another tab saved
 
 try {
   loadLookup();

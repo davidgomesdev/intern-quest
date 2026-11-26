@@ -934,6 +934,24 @@ scenario("owndel", """SAVED.c00001 = {s: 'email', t: 5}; localStorage.setItem('i
 scenario("ownfull", OWNFORM + """Storage.prototype.setItem = () => { throw new Error('full'); };
   $('[data-act=add]').click(); set('nome', 'Nova'); send(); out.open = D().open; out.err = $('#propria-erro').textContent;""")
 
+def own_import(file, times=1):
+    return ("delete out.alert; " + IMPORT.replace("%FILE%", json.dumps(file)).replace("const dt", "{ const dt") + "\n}") * times
+
+
+XLIST = [["Importada", [["c00001", "x"]]]]
+OTHER = {"listas": XLIST, "estados": {"c00001": {"s": "email", "t": 9}}, "proprias": [own("c00001", "Outra", 2)]}
+scenario("ownimport", own_import(OTHER, 2) + " out.rows = $$('#rows tr .minha').length; $('[data-act=exp]').click(); out.backup = out.blob;", seed=own_seed(own("c00001", "Local", 1)))
+scenario("ownnewer", own_import({"listas": [["Importada", [["c00007", "x"]]]], "proprias": [own("c00007", "Nova versão", 1, editado=50)]}), seed=own_seed(own("c00001", "Local", 1)))
+scenario("ownorphan", own_import({"listas": XLIST, "estados": OTHER["estados"]}), seed=own_seed(own("c00001", "Local", 1)))
+scenario("ownnotime", own_import({"listas": [], "proprias": [own("c00001", "Sem data", 0)]}), seed=own_seed(own("c00001", "Local", 0)))
+OWNLINKS = """JSON.stringify([["Favoritas", [["c00001", "nota"], ["e0002", "ligar"]]], ["So", [["c00001", ""]]]])"""
+scenario("ownlink", """SAVED.c00001 = {s: 'visto', t: 1000}; $('[data-act=link]').click(); await tick(); out.share = out.copied; out.a1 = out.alert;
+  delete out.alert; $('[data-act=lnk]').click(); await tick(); out.device = out.copied; out.a2 = out.alert;
+  delete out.alert; delete out.copied; $$('#listas .tab').find(b => b.textContent.startsWith('So')).click(); $('[data-act=link]').click(); await tick(); out.a3 = out.alert; out.only = out.copied || '';""",
+         "l=Favoritas", seed=own_seed(own("c00001", "Minha", 1), lists=OWNLINKS))
+scenario("ownlinked", "", "copia=" + quote(json.dumps({"listas": [["R", [["c00001", "n"], ["e0001", ""]]]], "estados": {"c00001": {"s": "visto", "t": 7}}, "proprias": [own("c00009", "De fora", 3)]})),
+         seed=own_seed(own("c00001", "Local", 1)))
+
 
 def _jobs(tmp, fixture):
     """Every page job: [(id, page path, hash, virtual ms it may take)]; sweeps carry their hashes in the page."""
@@ -1204,7 +1222,7 @@ def _part_lists_b():
 
     dom, out = R.lists("backup")
     assert out["file2"] == "abre-portas-copia.json"
-    assert json.loads(out["backup"]) == {"listas": [FAV, ["Vazia", []]], "estados": {"e0001": {"s": "visto", "t": 1000}, "e0002": {"s": "email", "t": 5000}}}
+    assert json.loads(out["backup"]) == {"listas": [FAV, ["Vazia", []]], "estados": {"e0001": {"s": "visto", "t": 1000}, "e0002": {"s": "email", "t": 5000}}, "proprias": []}
     assert out["alert"] == "Cópia importada."
     assert stored(out) == [["Favoritas", FAV[1] + [["e0003", ""]]], ["Vazia", []], ["Importada", [["e0001", "x"]]]]
     assert json.loads(out["status"]) == {"e0001": {"s": "email", "t": 2000}, "e0002": {"s": "email", "t": 5000}}
@@ -1305,6 +1323,23 @@ def _part_own():
     assert "c00001" not in out["stored"] + out["status"] and "c00001" not in _ids(dom)
     dom, out = R.lists("ownfull")
     assert out["open"] and out["err"].startswith("Não guardado"), out
+
+    names = lambda out: [(x["id"], x["nome"]) for x in json.loads(out["own"])]
+    dom, out = R.lists("ownimport")  # same id, different creation time: a second entry, and its note and status follow it
+    assert names(out) == [("c00001", "Local"), ("c00002", "Outra")] and out["rows"] == 2 and out["alert"] == "Cópia importada.", out
+    assert ["Importada", [["c00002", "x"]]] in stored(out) and json.loads(out["status"]) == {"c00002": {"s": "email", "t": 9}}, out
+    assert [x["nome"] for x in json.loads(out["backup"])["proprias"]] == ["Local", "Outra"]
+    dom, out = R.lists("ownnewer")  # same creation time: same entry whatever its id; the newer edit wins
+    assert names(out) == [("c00001", "Nova versão")] and stored(out)[-1] == ["Importada", [["c00001", "x"]]], out
+    dom, out = R.lists("ownorphan")  # a file without the entry cannot attach a note or a status to a local one
+    assert stored(out)[-1] == ["Importada", []] and json.loads(out["status"] or "{}") == {}, out
+    dom, out = R.lists("ownnotime")  # no creation time: not enough to call two entries the same
+    assert names(out) == [("c00001", "Local"), ("c00002", "Sem data")], out
+    dom, out = R.lists("ownlink")
+    assert "c00001" not in unquote(out["share"]) + unquote(out["device"]) and "0002" in out["share"] and "#copia=" in out["device"], out
+    assert "não vão no link" in out["a1"] and "Exportar cópia" in out["a2"] and "só tem" in out["a3"] and out["only"] == "", out
+    dom, out = R.lists("ownlinked")
+    assert stored(out)[-1] == ["R", [["e0001", ""]]] and names(out) == [("c00001", "Local")] and json.loads(out["status"] or "{}") == {}, out
 
 
 PAGE_PARTS = [_part_filters, _part_paging, _part_edge, _part_lists_a, _part_lists_b, _part_locations, _part_own]

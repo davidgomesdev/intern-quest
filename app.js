@@ -34,17 +34,49 @@ function mergeLists(data) { // data has the ser() shape; throws if it does not
 }
 try { mergeLists(JSON.parse(localStorage.getItem('iq-lists') || '[]')); } catch { /* no storage or corrupt: keep what parsed */ }
 const LINK_MAX = 8000; // chars: chat apps and servers start cutting URLs around here
-const backup = () => ({ listas: ser(), estados: SAVED }); // the backup file / link payload
+const backup = () => ({ listas: ser(), estados: SAVED, proprias: loadOwn() }); // the backup file; links use linkBackup()
+function remapOwn(d, map) { // the lists and statuses of d, each c id replaced through map; one with no mapping is dropped
+  const to = id => (OWN_ID.test(id) ? map.get(id) : id);
+  return {
+    listas: (Array.isArray(d) ? d : d.listas).map(([name, items]) => [name, items.flatMap(([id, note]) => (to(id) ? [[to(id), note]] : []))]),
+    estados: Object.fromEntries(Object.entries(d.estados || {}).flatMap(([id, v]) => (to(id) ? [[to(id), v]] : []))),
+  };
+}
+const stripOwn = d => remapOwn(d, new Map()); // for links: two browsers number their own entries independently
+const linkBackup = () => stripOwn({ listas: ser(), estados: SAVED });
+const NOT_SAVED = 'not saved';
+function mergeOwn(incoming) { // `criado` says whether two entries are the same one; returns file id -> id here
+  const map = new Map();
+  if (!Array.isArray(incoming) || !incoming.length) return map; // also: links are merged before the custom-entry code below is set up
+  const ok = writeOwn(list => {
+    for (const e of incoming.map(cleanEntry).filter(Boolean)) {
+      const i = list.findIndex(x => x.criado === e.criado && (e.criado || (x.id === e.id && x.nome === e.nome))); // no creation time: id and name must agree
+      if (i >= 0) {
+        map.set(e.id, list[i].id);
+        if (e.editado > list[i].editado) list[i] = { ...e, id: list[i].id };
+      } else {
+        const id = list.some(x => x.id === e.id) ? nextOwnId(list) : e.id;
+        map.set(e.id, id);
+        list.push({ ...e, id });
+      }
+    }
+    return list.sort(byId);
+  });
+  if (!ok) throw new Error(NOT_SAVED);
+  return map;
+}
 function mergeBackup(d) { // lists merge by name; per entity the newest status wins. An array is the old lists-only file.
-  mergeLists(Array.isArray(d) ? d : d.listas);
-  for (const [id, v] of Object.entries(d.estados || {})) {
+  stripOwn(d); // throws on a wrong shape before anything is written
+  const m = remapOwn(d, mergeOwn(d.proprias));
+  mergeLists(m.listas);
+  for (const [id, v] of Object.entries(m.estados)) {
     if (ANY_ID.test(id) && Object.hasOwn(STATUS, v?.s) && Number.isFinite(v.t) && !(SAVED[id]?.t >= v.t)) SAVED[id] = { s: v.s, t: v.t };
   }
   try { localStorage.setItem('iq-status', JSON.stringify(SAVED)); } catch { /* storage full or blocked */ }
   saveLists();
 }
 const linked = new URLSearchParams(location.hash.slice(1)).get('copia'); // link from another device: #copia=<json>; writeState() drops it from the URL
-if (linked) try { mergeBackup(JSON.parse(linked)); } catch { /* bad link: ignore */ }
+if (linked) try { mergeBackup(stripOwn(JSON.parse(linked))); } catch { /* bad link: ignore */ }
 function bizDays(t) { // Mon-Fri days from the day after t up to today
   let n = 0;
   const end = new Date().setHours(0, 0, 0, 0);
@@ -677,7 +709,12 @@ const ACT = { // every [data-act] button
   },
   rm: b => { if (dropOk(S.l, b.dataset.r)) { LST.get(S.l).delete(b.dataset.r); saveLists(); update(); } },
   emails: b => copy(b, emails().join('; ')),
-  link: b => copy(b, location.href.replace(/#.*/, '') + '#' + new URLSearchParams({ share: S.l + ':' + members().map(r => r.id.slice(1)) }).toString().replace(/%2C/g, ',')),
+  link: b => { // custom entries stay out of share links
+    const all = members(), sent = all.filter(r => !r.own);
+    if (all.length && !sent.length) return alert('Esta lista só tem entidades que adicionaste, que não vão no link.');
+    copy(b, location.href.replace(/#.*/, '') + '#' + new URLSearchParams({ share: S.l + ':' + sent.map(r => r.id.slice(1)) }).toString().replace(/%2C/g, ','));
+    if (sent.length < all.length) alert('As entidades que adicionaste não vão no link.');
+  },
   csv: () => {
     // ponytail: ';' separator because pt-PT Excel expects it (Sheets detects either)
     const cell = v => { v = String(v ?? ''); return '"' + (/^[=+\-@\t\r]/.test(v) ? "'" : '') + v.replace(/"/g, '""') + '"'; }; // a leading = + - @ gets a ' so spreadsheets do not run it as a formula
@@ -698,9 +735,10 @@ const ACT = { // every [data-act] button
   exp: () => download('abre-portas-copia.json', JSON.stringify(backup()), 'application/json'),
   imp: () => $('#imp-f').click(),
   lnk: b => {
-    const url = location.href.replace(/#.*/, '') + '#copia=' + encodeURIComponent(JSON.stringify(backup()));
-    if (url.length > LINK_MAX) alert('Há dados a mais para caber num link. Usa "Exportar cópia" e "Importar cópia" no outro dispositivo.');
-    else copy(b, url);
+    const url = location.href.replace(/#.*/, '') + '#copia=' + encodeURIComponent(JSON.stringify(linkBackup()));
+    if (url.length > LINK_MAX) return alert('Há dados a mais para caber num link. Usa "Exportar cópia" e "Importar cópia" no outro dispositivo.');
+    copy(b, url);
+    if (loadOwn().length) alert('As entidades que adicionaste (e as suas notas e estados) não vão no link. Usa "Exportar cópia".');
   },
 };
 document.addEventListener('click', e => {
@@ -739,8 +777,8 @@ $('#imp-f').addEventListener('change', async e => {
   const f = e.target.files[0];
   e.target.value = '';
   if (!f) return;
-  try { mergeBackup(JSON.parse(await f.text())); update(); alert('Cópia importada.'); }
-  catch { alert('Ficheiro inválido. Usa um ficheiro exportado daqui.'); }
+  try { mergeBackup(JSON.parse(await f.text())); reloadOwn(); update(); alert('Cópia importada.'); }
+  catch (err) { alert(err.message === NOT_SAVED ? 'Não importado: o navegador bloqueou o armazenamento.' : 'Ficheiro inválido. Usa um ficheiro exportado daqui.'); }
 });
 
 $('thead').addEventListener('click', e => {

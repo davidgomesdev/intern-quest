@@ -17,6 +17,7 @@ let REMIND = true; // follow-up reminders on/off, per browser
 try { REMIND = localStorage.getItem('iq-remind') !== '0'; } catch { /* no storage: on */ }
 // Custom lists, per browser: list name -> Map(entity id -> note). Maps, so names and ids from imports or links never touch Object.prototype.
 const LIST_MAX = 40, NOTE_MAX = 500;
+const OWN_ID = /^c\d{5}$/, ANY_ID = /^(e\d{4,}|c\d{5})$/; // eNNNN: an OPP protocol number; cNNNNN: added by the visitor
 let LST = new Map(), SHARE = null, PICK = ''; // SHARE: a list received in a link, waiting to be saved; PICK: entity whose list menu is open
 const ser = () => [...LST].map(([n, m]) => [n, [...m]]); // the storage / backup-file shape
 function saveLists() { // true if the browser kept it; false when storage is full or blocked
@@ -28,7 +29,7 @@ function mergeLists(data) { // data has the ser() shape; throws if it does not
     if (!k) continue;
     const m = LST.get(k) || new Map();
     LST.set(k, m);
-    for (const [id, note] of items) if (/^e\d{4,}$/.test(id) && !m.get(id)) m.set(id, String(note ?? '').slice(0, NOTE_MAX));
+    for (const [id, note] of items) if (ANY_ID.test(id) && !m.get(id)) m.set(id, String(note ?? '').slice(0, NOTE_MAX));
   }
 }
 try { mergeLists(JSON.parse(localStorage.getItem('iq-lists') || '[]')); } catch { /* no storage or corrupt: keep what parsed */ }
@@ -37,7 +38,7 @@ const backup = () => ({ listas: ser(), estados: SAVED }); // the backup file / l
 function mergeBackup(d) { // lists merge by name; per entity the newest status wins. An array is the old lists-only file.
   mergeLists(Array.isArray(d) ? d : d.listas);
   for (const [id, v] of Object.entries(d.estados || {})) {
-    if (/^e\d{4,}$/.test(id) && Object.hasOwn(STATUS, v?.s) && Number.isFinite(v.t) && !(SAVED[id]?.t >= v.t)) SAVED[id] = { s: v.s, t: v.t };
+    if (ANY_ID.test(id) && Object.hasOwn(STATUS, v?.s) && Number.isFinite(v.t) && !(SAVED[id]?.t >= v.t)) SAVED[id] = { s: v.s, t: v.t };
   }
   try { localStorage.setItem('iq-status', JSON.stringify(SAVED)); } catch { /* storage full or blocked */ }
   saveLists();
@@ -63,10 +64,51 @@ const LOC = {}; // distrito -> Set of locais (from lookup/, embedded in index.ht
 const RANK = {}, PX = {}; // distrito -> rank (key order of the lookup); phone prefix -> distritos
 
 const norm = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();
-const defaults = () => ({ nome: '', c: '', d: '', a: [], st: [], l: '', estado: 'ok', excluir: true, contacto: false, ord: 'n', dir: 'asc', p: 1, pp: PP });
+const defaults = () => ({ nome: '', c: '', d: '', a: [], st: [], l: '', minhas: false, estado: 'ok', excluir: true, contacto: false, ord: 'n', dir: 'asc', p: 1, pp: PP });
 
-function parse() {
-  ROWS = Array.from(tbody.rows, el => {
+// ---------- Custom entries (this browser only), SPEC 6.8 ----------
+const OWN_KEY = 'iq-custom';
+const OWN_CAPS = { nome: 200, morada: 200, adicional: 500, website: 200, email: 200, telefone: 40 };
+
+function cleanEntry(x) { // the one validator for stored, imported and typed entries; null if it cannot be one
+  if (!x || typeof x !== 'object' || !OWN_ID.test(x.id)) return null;
+  const e = { id: x.id, criado: Number.isFinite(x.criado) ? x.criado : 0, editado: Number.isFinite(x.editado) ? x.editado : 0 };
+  for (const [k, max] of Object.entries(OWN_CAPS)) e[k] = typeof x[k] === 'string' ? x[k].trim().slice(0, max) : '';
+  if (!e.nome) return null;
+  e.distrito = Object.hasOwn(LOC, x.distrito) ? x.distrito : '';
+  e.local = e.distrito && LOC[e.distrito].has(x.local) ? x.local : '';
+  e.areas = [...new Set(Array.isArray(x.areas) ? x.areas : [])].filter(k => Object.hasOwn(AREAS, k) && k !== 'desconhecido');
+  if (e.website) {
+    const w = /^[a-z][a-z0-9+.-]*:/i.test(e.website) ? e.website : 'https://' + e.website;
+    try { e.website = /^https?:$/.test(new URL(w).protocol) ? w : ''; } catch { e.website = ''; }
+  }
+  if (!/^[^\s@]+@[^\s@]+$/.test(e.email)) e.email = '';
+  return e;
+}
+
+function loadOwn() { // what cannot be read is copied aside first, so the next save cannot destroy it
+  let raw = null, data = null;
+  try { raw = localStorage.getItem(OWN_KEY); } catch { return []; }
+  if (raw == null) return [];
+  try { data = JSON.parse(raw); } catch { /* not JSON */ }
+  const list = Array.isArray(data) ? data.map(cleanEntry) : [];
+  if (!Array.isArray(data) || list.includes(null)) try { localStorage.setItem(OWN_KEY + '-bad', raw); } catch { /* storage full or blocked */ }
+  return list.filter(Boolean);
+}
+
+function ownRow(e) { // the same 11 cells as an OPP row, so parseRow and everything after it treat both alike
+  const tr = el('tr'); tr.id = e.id;
+  const cells = ['✏️', e.id, e.nome, e.local, e.distrito, e.morada, e.areas.join(' '), e.adicional, e.website, e.email, e.telefone];
+  cells.forEach((v, i) => {
+    const td = el('td', '', v);
+    if (!v) td.append(ph(i === 4 || i === 6 ? 'desconhecido' : 'indisponível'));
+    tr.append(td);
+  });
+  return tr;
+}
+
+function parseRow(el) {
+    const own = OWN_ID.test(el.id);
     const c = el.cells, miss = td => !td.textContent || td.firstElementChild?.tagName === 'I';
     const val = i => (miss(c[i]) ? null : c[i].textContent);
     let data = {};
@@ -78,20 +120,38 @@ function parse() {
       : [{ local: val(3), distrito: val(4), morada: val(5), telefone: val(10), email: val(9), main: false }];
     const dists = [...new Set(locs.map(l => l.distrito).filter(Boolean))];
     const areas = miss(c[6]) ? (c[6].firstElementChild ? ['desconhecido'] : []) : c[6].textContent.split(' ');
-    return { el, id: el.id, n: +c[1].textContent, ok: ['✅', '🔄'].includes(c[0].textContent), pend: c[0].textContent === '🔄', priv: c[0].textContent === '🔒', removed: 'removed' in el.dataset,
+    return { el, id: el.id, own, n: own ? +el.id.slice(1) - 1e5 : +c[1].textContent, // own ones sort first by Nº, in creation order
+      ok: own || ['✅', '🔄'].includes(c[0].textContent), pend: c[0].textContent === '🔄', priv: c[0].textContent === '🔒', removed: 'removed' in el.dataset,
       empty: Array.from(c).slice(3, 11).every(miss),
       nome: c[2].textContent, locs, tels: strs(data.t), mails: strs(data.e), dists, dUnk: !dists.length && !!c[4].firstElementChild, areas,
       kNome: norm(c[2].textContent), contacto: !!(val(8) || val(9) || val(10)), done: false,
       site: val(8) }; // raw text, kept for list exports
-  });
+}
+
+function index() {
   BYID = new Map(ROWS.map(r => [r.id, r]));
   TOTAL = ROWS.filter(r => !r.removed).length;
 }
 
-function buildOptions() {
+function parse() {
+  ROWS = [...Array.from(tbody.rows, parseRow), ...loadOwn().map(e => parseRow(ownRow(e)))];
+  index();
+}
+
+function loadLookup() { // before parse(): custom entries are validated against it
   for (const [d, ls] of Object.entries(JSON.parse($('#lookup').textContent))) { RANK[d] = Object.keys(LOC).length; LOC[d] = new Set(ls); }
   Object.assign(PX, JSON.parse($('#prefixos').textContent));
-  form.elements.d.options[1].before(...[...new Set(ROWS.flatMap(r => r.dists))].sort(COLL.compare).map(v => new Option(v)));
+}
+
+function distOptions() { // the distritos present, between "Todos" and "Desconhecido"
+  const s = form.elements.d, v = s.value;
+  while (s.length > 2) s.remove(1);
+  s.options[1].before(...[...new Set(ROWS.flatMap(r => r.dists))].sort(COLL.compare).map(x => new Option(x)));
+  s.value = v;
+}
+
+function buildOptions() {
+  distOptions();
 }
 
 function fillLocais(d) { // Local depends on Distrito
@@ -103,7 +163,7 @@ function fillLocais(d) { // Local depends on Distrito
 
 function readState() {
   const q = new URLSearchParams(location.hash.slice(1)), g = k => q.get(k) || '';
-  S = { ...defaults(), nome: g('nome'), c: g('c'), d: g('d'), l: LST.has(g('l')) ? g('l') : '',
+  S = { ...defaults(), nome: g('nome'), c: g('c'), d: g('d'), l: LST.has(g('l')) ? g('l') : '', minhas: g('minhas') === '1' && !LST.has(g('l')) && ROWS.some(r => r.own),
     a: g('a').split(',').filter(k => Object.hasOwn(AREAS, k)), st: g('st').split(',').filter(k => Object.hasOwn(STATUS, k)), excluir: g('vazias') !== '1' && g('excluir') !== '0', contacto: g('contacto') === '1', // vazias=1: old links that showed them
     estado: ['todos', 'todo'].includes(g('estado')) ? g('estado') : 'ok',
     ord: Object.hasOwn(KEY, g('ord')) ? g('ord') : 'n', dir: g('dir') === 'desc' ? 'desc' : 'asc', p: parseInt(g('p'), 10) || 1,
@@ -176,7 +236,8 @@ function matches(r, q) {
     && (!S.st.length || S.st.includes(stOf(r)))
     && (!S.a.length || S.a.some(a => r.areas.includes(a)))
     && (S.l ? LST.get(S.l).has(r.id) // inside a list every member shows, filled or not
-      : ((q.estado || S.estado) === 'todos' || ((q.estado || S.estado) === 'ok' ? r.ok : !r.ok && !r.priv)) && (!S.excluir || !(r.ok && r.empty)))
+      : r.own || (((q.estado || S.estado) === 'todos' || ((q.estado || S.estado) === 'ok' ? r.ok : !r.ok && !r.priv)) && (!S.excluir || !(r.ok && r.empty)))) // your own entries are never hidden by these two
+    && (!S.minhas || r.own)
     && !r.removed && (!S.contacto || r.contacto);
 }
 
@@ -214,7 +275,7 @@ function enhance(r) {
   r.el.setAttribute('role', 'row');
   for (const td of c) td.setAttribute('role', 'cell');
   const st = el('span', r.ok || r.priv ? 'st' : 'st st-todo', c[0].textContent),
-    label = r.pend ? 'A rever localizações' : r.ok ? 'Preenchido' : r.priv ? 'Pessoa singular: dados não publicados' : 'Por preencher';
+    label = r.own ? 'Adicionada por mim' : r.pend ? 'A rever localizações' : r.ok ? 'Preenchido' : r.priv ? 'Pessoa singular: dados não publicados' : 'Por preencher';
   st.setAttribute('role', 'img'); st.setAttribute('aria-label', label); st.title = label;
   const src = r.el.dataset.src;
   if (src) { // sources popup: <details> gives click/tap/keyboard for free
@@ -237,6 +298,7 @@ function enhance(r) {
     c[6].replaceChildren(w);
   }
   if (has(c[8])) site(c[8]);
+  if (r.own) c[2].append(' ', el('span', 'minha', '✏️ Minha'));
   const td = el('td'), sel = el('select', 'pilula'); // status picker (extra column, not part of the HTML row contract)
   sel.setAttribute('aria-label', 'Estado de seguimento'); sel.dataset.id = r.id; r.sel = sel;
   for (const k in STATUS) sel.append(new Option(STATUS[k] + (NOTE.includes(k) ? ' 🔔' : ''), k));
@@ -244,7 +306,7 @@ function enhance(r) {
   const rep = el('button', 'rep', '🚩'); rep.type = 'button'; rep.title = rep.ariaLabel = 'Reportar erro nesta entidade';
   const mail = 'mailto:opp-estagios@davidgomes.blog?subject=' + encodeURIComponent(`${r.el.id} – ${c[2].textContent.replace(/\s+/g, ' ').trim()}`) + '&body=' + encodeURIComponent('Descreve o erro nesta entidade:\n');
   rep.onclick = () => { location.href = mail; };
-  c[1].append(' ', rep);
+  if (!r.own) c[1].append(' ', rep); // nothing to report about your own entry
   td.setAttribute('role', 'cell'); td.append(sel); r.el.append(td);
   r.tl = el('span', 'lst'); c[1].append(' ', r.tl); // lists: ★ (+ ✕ inside a list) right after the 🚩, same flat style. Filled by listCell()
   r.tn = el('td'); r.tn.setAttribute('role', 'cell'); r.el.append(r.tn); // the note, inside a list
@@ -315,9 +377,9 @@ function render(slice) {
 }
 
 function renderCount(list, last) {
-  const total = S.l ? LST.get(S.l).size : TOTAL, filled = list.filter(r => r.ok).length;
+  const total = S.l ? LST.get(S.l).size : S.minhas ? ROWS.filter(r => r.own).length : TOTAL, filled = list.filter(r => r.ok).length;
   $('#count').replaceChildren(el('strong', '', list.length), ` de ${total} entidades, ${filled} com dados`);
-  const todo = S.l || S.estado !== 'ok' ? 0 : ROWS.filter(r => matches(r, { nome: norm(S.nome), estado: 'todo' })).length; // the default filter hides ⬜ rows: say how many
+  const todo = S.l || S.minhas || S.estado !== 'ok' ? 0 : ROWS.filter(r => !r.own && matches(r, { nome: norm(S.nome), estado: 'todo' })).length; // the default filter hides ⬜ rows: say how many
   if (todo) $('#count').append(el('span', 'pend', ` (${todo} ainda por preencher)`));
   document.querySelectorAll('.pager').forEach(p => {
     p.querySelector('span').textContent = `Página ${S.p} de ${last}`;
@@ -378,7 +440,7 @@ function update() {
 form.addEventListener('input', () => { fromForm(); update(); });
 $('#pp').addEventListener('change', e => { S.pp = +e.target.value; S.p = 1; update(); });
 form.addEventListener('submit', e => e.preventDefault());
-form.addEventListener('reset', e => { e.preventDefault(); S = { ...defaults(), l: S.l }; toForm(); update(); }); // clearing filters keeps the open list
+form.addEventListener('reset', e => { e.preventDefault(); S = { ...defaults(), l: S.l, minhas: S.minhas }; toForm(); update(); }); // clearing filters keeps the open list
 $('#remind').checked = REMIND;
 $('#remind').addEventListener('change', e => {
   REMIND = e.target.checked;
@@ -436,13 +498,15 @@ function shareBanner() {
 function renderTabs() {
   const tab = (label, l, n) => {
     const b = el('button', 'tab', label);
-    b.type = 'button'; b.dataset.act = 'tab'; b.dataset.l = l; b.setAttribute('aria-pressed', l === S.l);
+    b.type = 'button'; b.dataset.act = 'tab'; b.dataset.l = l; b.setAttribute('aria-pressed', l === S.l && !S.minhas);
     if (n != null) b.append(el('span', 'n', n));
     return b;
   };
   const add = el('button', 'tab nova', '+ Nova lista');
   add.type = 'button'; add.dataset.act = 'new';
-  $('#listas').replaceChildren(tab('Todas', ''), ...[...LST].map(([n, m]) => tab(n, n, m.size)), add);
+  const mine = ROWS.filter(r => r.own).length, own = mine ? tab('Adicionadas por mim', '', mine) : null;
+  if (own) { own.dataset.act = 'owntab'; own.setAttribute('aria-pressed', S.minhas); }
+  $('#listas').replaceChildren(tab('Todas', ''), ...(own ? [own] : []), ...[...LST].map(([n, m]) => tab(n, n, m.size)), add);
   $('#listas').hidden = $('#backup').hidden = false;
   $('#lista-acoes').hidden = !S.l;
   if (S.l) {
@@ -510,8 +574,9 @@ function download(name, text, type) {
 
 const ACT = { // every [data-act] button
   ajuda: b => { const h = $('#ajuda'); h.hidden = !h.hidden; b.setAttribute('aria-expanded', !h.hidden); if (!h.hidden) b.closest('details').open = true; }, // the ? next to the backup title
-  tab: b => { S.l = b.dataset.l; S.p = 1; update(); },
-  new: () => { const k = addList(prompt('Nome da nova lista')); if (k) { S.l = k; S.p = 1; update(); } },
+  tab: b => { S.l = b.dataset.l; S.minhas = false; S.p = 1; update(); },
+  owntab: () => { S.l = ''; S.minhas = true; S.p = 1; update(); },
+  new: () => { const k = addList(prompt('Nome da nova lista')); if (k) { S.l = k; S.minhas = false; S.p = 1; update(); } },
   pick: b => { PICK = PICK === b.dataset.r ? '' : b.dataset.r; update(); $('.lst-menu input')?.focus(); }, // second click on the same ★ closes it
   padd: b => { // create a list from the menu and put the entity in it
     const k = addList(b.closest('.lst-menu').querySelector('input[type=text]').value);
@@ -525,7 +590,7 @@ const ACT = { // every [data-act] button
   csv: () => {
     // ponytail: ';' separator because pt-PT Excel expects it (Sheets detects either)
     const cell = v => { v = String(v ?? ''); return '"' + (/^[=+\-@\t\r]/.test(v) ? "'" : '') + v.replace(/"/g, '""') + '"'; }; // a leading = + - @ gets a ' so spreadsheets do not run it as a formula
-    const rows = members().map(r => { const f = shown(r)[0]; return [r.n, r.nome, f.local, f.distrito, r.dists.join('; '), f.morada, contacts(r, 'email')[0], contacts(r, 'telefone')[0]?.replace(/^\+351 /, ''), r.site, STATUS[stOf(r)], LST.get(S.l).get(r.id)]; });
+    const rows = members().map(r => { const f = shown(r)[0]; return [r.own ? r.id : r.n, r.nome, f.local, f.distrito, r.dists.join('; '), f.morada, contacts(r, 'email')[0], contacts(r, 'telefone')[0]?.replace(/^\+351 /, ''), r.site, STATUS[stOf(r)], LST.get(S.l).get(r.id)]; });
     download(slug() + '.csv', '\ufeff' + [['Nº', 'Nome', 'Local', 'Distrito', 'Distritos', 'Morada', 'E-mail', 'Telefone', 'Website', 'Seguimento', 'Nota'], ...rows]
       .map(x => x.map(cell).join(';')).join('\r\n'), 'text/csv;charset=utf-8');
   },
@@ -536,7 +601,7 @@ const ACT = { // every [data-act] button
   shsave: () => { // a shared list joins the list of the same name, or becomes a new one
     const m = LST.get(SHARE.name) || new Map();
     for (const id of SHARE.ids) if (!m.has(id)) m.set(id, '');
-    LST.set(SHARE.name, m); S.l = SHARE.name; S.p = 1; SHARE = null; saveLists(); update();
+    LST.set(SHARE.name, m); S.l = SHARE.name; S.minhas = false; S.p = 1; SHARE = null; saveLists(); update();
   },
   shskip: () => { SHARE = null; update(); },
   exp: () => download('abre-portas-copia.json', JSON.stringify(backup()), 'application/json'),
@@ -602,6 +667,7 @@ document.addEventListener('click', e => {
 window.addEventListener('hashchange', () => { readState(); update(); });
 
 try {
+  loadLookup();
   parse();
   buildOptions();
   if (matchMedia('(max-width: 719px)').matches) $('#painel').open = false;

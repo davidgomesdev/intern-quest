@@ -266,6 +266,7 @@ input[name=st] + span::before { content: ""; display: inline-block; width: .6em;
 }
 .rep, .lst-btn, .lst-rm { font: inherit; padding: 0 2px; border: 0; background: none; cursor: pointer; } /* flat icon buttons next to the entity number */
 .rep { filter: grayscale(.6); }
+.minha { display: inline-block; padding: 0 8px; font-size: 12px; font-weight: 600; white-space: nowrap; color: var(--chip-fg); background: var(--soft); border-radius: 999px; vertical-align: middle; }
 .rep:hover, .rep:focus-visible { filter: none; }
 
 /* ---------- Custom lists ---------- */

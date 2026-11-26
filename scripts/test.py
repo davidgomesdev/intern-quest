@@ -651,7 +651,7 @@ addEventListener('load', async () => {
   try {
   %BODY%
   } catch (e) { out.error = String(e); }
-  out.stored = localStorage.getItem('iq-lists'); out.status = localStorage.getItem('iq-status'); out.hash = location.hash;
+  out.stored = localStorage.getItem('iq-lists'); out.own = localStorage.getItem('iq-custom'); out.bad = localStorage.getItem('iq-custom-bad'); out.status = localStorage.getItem('iq-status'); out.hash = location.hash;
   localStorage.clear();
   finish({out});
 });</script>"""
@@ -691,7 +691,7 @@ def _ativos(dom): return _text(dom, r'<span id="ativos">(.*?)</span>')
 def _pager(dom): return _text(dom, r'<nav class="pager"[^>]*>.*?<span>(.*?)</span>')
 def _disabled(dom): return len(re.findall(r'data-p="(?:prev|next)"[^>]*disabled', dom))
 def _ids(dom):
-    return re.findall(r'<tr id="(e\d+)"', dom.split('<tbody id="rows"', 1)[1].split("</tbody>", 1)[0])
+    return re.findall(r'<tr id="([ec]\d+)"', dom.split('<tbody id="rows"', 1)[1].split("</tbody>", 1)[0])
 def _cell(dom, rid, i):
     """Text of cell i (0-based, like the columns of a row) of row rid."""
     tr = re.search(rf'<tr id="{rid}".*?</tr>', dom, re.S).group(0)
@@ -894,6 +894,25 @@ scenario("badfile", """const dt = new DataTransfer(), file = new File(['{nope'],
   for (let i = 0; i < 400 && !out.alert; i++) { await tick(); await file.text(); }  // reading the file takes real time, not virtual: also do a real read per turn, and allow plenty of turns on a slow runner""")
 scenario("corrupt", view, seed="'{bad'")  # corrupt storage: page still works, no lists
 scenario("hostile", view, seed="""JSON.stringify([["__proto__", [["e0002", "x"], ["__proto__", "y"]]], ["ok", [["e0003"]]], [" ", []]])""")
+
+def own(i, nome, criado, **over):
+    return {"id": i, "criado": criado, "editado": criado, "nome": nome, "local": "", "distrito": "", "morada": "",
+            "areas": [], "adicional": "", "website": "", "email": "", "telefone": "", **over}
+
+
+def own_seed(*entries, lists=LISTS_SEED):  # closes the iq-lists setItem and opens one for iq-custom
+    return f"{lists}); localStorage.setItem('iq-custom', {json.dumps(json.dumps(list(entries)))}"
+
+
+OWN2 = own_seed(own("c00001", "Zeta Minha", 1),
+                own("c00002", "<img src=x onerror=alert(1)>", 2, website="javascript:alert(1)", distrito="Porto", local="Amarante"))
+ownlook = ("out.tabs = $$('#listas .tab').map(b => b.textContent); out.badge = $$('#rows .minha').length;"
+           "out.reps = $$('#c00001 .rep, #c00002 .rep').length; out.imgs = $$('#rows img').length;"
+           "out.links = $$('#rows a').filter(a => a.protocol === 'javascript:').length;")
+scenario("ownview", ownlook, seed=OWN2)
+scenario("owntab", ownlook, "minhas=1&estado=todo", seed=OWN2)
+scenario("ownfilter", ownlook, "d=Porto&c=Amarante&nome=img", seed=OWN2)
+scenario("ownbad", ownlook, seed=LISTS_SEED + "); localStorage.setItem('iq-custom', '{bad'")
 
 
 def _jobs(tmp, fixture):
@@ -1234,8 +1253,24 @@ def _part_locations():
     assert '"Lisboa; Porto; Coimbra; Faro; Setúbal; Braga; Aveiro; Leiria; Santarém; Viseu"' in e11 and '"213 000 001"' in e11, e11
 
 
-PAGE_PARTS = [_part_filters, _part_paging, _part_edge, _part_lists_a, _part_lists_b, _part_locations]
+def _part_own():
+    R = _results()
+    if not R:
+        return
+    dom, out = R.lists("ownview")  # default filters (Com dados + excluir) still show a name-only entry, first by Nº
+    assert _ids(dom)[:2] == ["c00001", "c00002"] and _count(dom).startswith("62 de 122"), (_ids(dom), _count(dom))
+    assert "Adicionadas por mim2" in out["tabs"] and out["badge"] == 2 and out["reps"] == 0, out
+    assert out["imgs"] == 0 and out["links"] == 0 and "alert" not in out
+    assert _pending(dom).group(1) == "60"
+    dom, out = R.lists("owntab")
+    assert _ids(dom) == ["c00001", "c00002"] and out["hash"] == "#minhas=1&estado=todo", (_ids(dom), out["hash"])
+    dom, out = R.lists("ownfilter")
+    assert _ids(dom) == ["c00002"]
+    dom, out = R.lists("ownbad")
+    assert out["bad"] == "{bad" and _count(dom).startswith("60 de 120")
 
+
+PAGE_PARTS = [_part_filters, _part_paging, _part_edge, _part_lists_a, _part_lists_b, _part_locations, _part_own]
 
 def test_page():
     for part in PAGE_PARTS:

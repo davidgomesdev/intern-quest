@@ -757,7 +757,7 @@ def _need_chrome():
     return chrome
 
 
-ALL = "estado=todos&vazias=1&"
+ALL = "estado=todos&excluir=0&"
 D3 = "3 de 5 entidades, 3 com dados"
 # (hash, count, Filtros ativos) on the 5-row fixture
 CASES = [
@@ -768,19 +768,20 @@ CASES = [
     ("nome=agata", "1 de 5 entidades, 1 com dados", "(1 ativo)"),
     ("nome=%C3%81GATA", "1 de 5 entidades, 1 com dados", "(1 ativo)"),
     ("nome=epsilon", "0 de 5 entidades, 0 com dados", "(1 ativo)"),
-    ("nome=epsilon&vazias=1", "1 de 5 entidades, 1 com dados", "(2 ativos)"),
+    ("nome=epsilon&excluir=0", "1 de 5 entidades, 1 com dados", "(2 ativos)"),
     ("c=Porto", "1 de 5 entidades, 1 com dados", "(1 ativo)"),
     ("c=porto", D3, ""),
     ("d=Lisboa", "2 de 5 entidades, 2 com dados", "(1 ativo)"),
     ("d=desconhecido", "0 de 5 entidades, 0 com dados", "(1 ativo)"),
-    ("d=desconhecido&vazias=1", "1 de 5 entidades, 1 com dados", "(2 ativos)"),
+    ("d=desconhecido&excluir=0", "1 de 5 entidades, 1 com dados", "(2 ativos)"),
     ("contacto=1", D3, "(1 ativo)"),
     ("contacto=1&estado=todos", D3, "(2 ativos)"),
     ("estado=todo", "1 de 5 entidades, 0 com dados", "(1 ativo)"),
     ("estado=ok", D3, ""),
     ("estado=todos", "4 de 5 entidades, 3 com dados", "(1 ativo)"),
-    ("vazias=1", "4 de 5 entidades, 4 com dados", "(1 ativo)"),
-    ("estado=todos&vazias=1", "5 de 5 entidades, 4 com dados", "(2 ativos)"),
+    ("vazias=1", "4 de 5 entidades, 4 com dados", "(1 ativo)"),  # legacy link: same as excluir=0
+    ("excluir=1", D3, ""),
+    ("estado=todos&excluir=0", "5 de 5 entidades, 4 com dados", "(2 ativos)"),
     ("nome=zzz", "0 de 5 entidades, 0 com dados", "(1 ativo)"),
     ("p=999&a=bogus&ord=zzz", D3, ""),
     ("ord=morada", D3, ""),

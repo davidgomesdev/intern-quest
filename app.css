@@ -265,9 +265,10 @@ input[name=st] + span::before { content: ""; display: inline-block; width: .6em;
   td:nth-child(12) { flex: 1 1 100%; padding: 6px 0 0; }
   .pilula { min-height: 40px; font-size: 15px; }
 }
-.rep, .lst-btn, .lst-rm { font: inherit; padding: 0 2px; border: 0; background: none; cursor: pointer; } /* flat icon buttons next to the entity number */
-.rep { filter: grayscale(.6); }
-.rep:hover, .rep:focus-visible { filter: none; }
+.rep, .own-btn, .lst-btn, .lst-rm { font: inherit; padding: 0 2px; border: 0; background: none; cursor: pointer; } /* flat icon buttons next to the entity number */
+.rep, .own-btn { filter: grayscale(.6); }
+.minha { display: inline-block; padding: 0 8px; font-size: 12px; font-weight: 600; white-space: nowrap; color: var(--chip-fg); background: var(--soft); border-radius: 999px; vertical-align: middle; }
+.rep:hover, .rep:focus-visible, .own-btn:hover, .own-btn:focus-visible { filter: none; }
 
 /* ---------- Custom lists ---------- */
 #listas { display: flex; flex-wrap: wrap; gap: 6px; padding: var(--s4) 0 0; }
@@ -349,3 +350,14 @@ td:nth-child(n+10):nth-child(-n+11) .help { position: static; display: inline-bl
 .locs summary { cursor: pointer; color: var(--accent); min-height: 24px; }
 .locs ul { margin: 4px 0 0; padding-left: 1.2em; display: grid; gap: 4px; line-height: 1.4; overflow-wrap: anywhere; }
 .locs a { display: inline-block; padding: 3px 0; }
+
+/* ---------- Add / edit your own entity ---------- */
+#propria { width: min(34rem, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: var(--s4); color: var(--fg); background: var(--card); border: 1px solid var(--edge); border-radius: var(--r-field); }
+#propria::backdrop { background: rgb(0 0 0 / .45); }
+#propria form { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s3); }
+#propria h2, #propria p { margin: 0; }
+#propria textarea { font: 16px/1.4 var(--sans); color: var(--fg); background: var(--card); border: 1px solid var(--edge); border-radius: var(--r-field); padding: 6px 10px; resize: vertical; }
+#propria-erro { color: var(--bad); }
+#propria-erro:empty { display: none; }
+#propria .botoes button { font: inherit; padding: 6px 16px; min-height: 40px; cursor: pointer; color: var(--fg); background: var(--card); border: 1px solid var(--edge); border-radius: var(--r-field); }
+#propria .botoes button[type=submit] { background: var(--soft); border-color: var(--accent); color: var(--chip-fg); font-weight: 600; }

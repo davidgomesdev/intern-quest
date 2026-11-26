@@ -651,7 +651,7 @@ addEventListener('load', async () => {
   try {
   %BODY%
   } catch (e) { out.error = String(e); }
-  out.stored = localStorage.getItem('iq-lists'); out.status = localStorage.getItem('iq-status'); out.hash = location.hash;
+  out.stored = localStorage.getItem('iq-lists'); out.own = localStorage.getItem('iq-custom'); out.bad = localStorage.getItem('iq-custom-bad'); out.status = localStorage.getItem('iq-status'); out.hash = location.hash;
   localStorage.clear();
   finish({out});
 });</script>"""
@@ -691,7 +691,7 @@ def _ativos(dom): return _text(dom, r'<span id="ativos">(.*?)</span>')
 def _pager(dom): return _text(dom, r'<nav class="pager"[^>]*>.*?<span>(.*?)</span>')
 def _disabled(dom): return len(re.findall(r'data-p="(?:prev|next)"[^>]*disabled', dom))
 def _ids(dom):
-    return re.findall(r'<tr id="(e\d+)"', dom.split('<tbody id="rows"', 1)[1].split("</tbody>", 1)[0])
+    return re.findall(r'<tr id="([ec]\d+)"', dom.split('<tbody id="rows"', 1)[1].split("</tbody>", 1)[0])
 def _cell(dom, rid, i):
     """Text of cell i (0-based, like the columns of a row) of row rid."""
     tr = re.search(rf'<tr id="{rid}".*?</tr>', dom, re.S).group(0)
@@ -880,7 +880,7 @@ scenario("garbage", "out.shown = !$('#partilha').hidden;", "share=garbage")
 IMPORT = """const dt = new DataTransfer(), file = new File([JSON.stringify(%FILE%)], 'l.json'); dt.items.add(file);
   $('#imp-f').files = dt.files; $('#imp-f').dispatchEvent(new Event('change'));
   for (let i = 0; i < 400 && !out.alert; i++) { await tick(); await file.text(); }  // reading the file takes real time, not virtual: also do a real read per turn, and allow plenty of turns on a slow runner"""
-scenario("backup", """SAVED.e0001 = {s: 'visto', t: 1000}; SAVED.e0002 = {s: 'email', t: 5000};
+scenario("backup", """SAVED.e0001 = {s: 'visto', t: 1000}; SAVED.e0002 = {s: 'email', t: 5000}; localStorage.setItem('iq-status', JSON.stringify(SAVED));
   $('[data-act=exp]').click(); out.backup = out.blob; out.file2 = out.file;
   """ + IMPORT.replace("%FILE%", """{listas: [['Importada', [['e0001', 'x'], ['bad', 'y']]], ['Favoritas', [['e0003', '']]]],
     estados: {e0001: {s: 'email', t: 2000}, e0002: {s: 'visto', t: 4000}, e0003: {s: 'nope', t: 1}, bad: {s: 'visto', t: 1}}}"""))  # newer wins; old, bad status and bad id dropped
@@ -894,6 +894,84 @@ scenario("badfile", """const dt = new DataTransfer(), file = new File(['{nope'],
   for (let i = 0; i < 400 && !out.alert; i++) { await tick(); await file.text(); }  // reading the file takes real time, not virtual: also do a real read per turn, and allow plenty of turns on a slow runner""")
 scenario("corrupt", view, seed="'{bad'")  # corrupt storage: page still works, no lists
 scenario("hostile", view, seed="""JSON.stringify([["__proto__", [["e0002", "x"], ["__proto__", "y"]]], ["ok", [["e0003"]]], [" ", []]])""")
+
+def own(i, nome, criado, **over):
+    return {"id": i, "criado": criado, "editado": criado, "nome": nome, "local": "", "distrito": "", "morada": "",
+            "areas": [], "adicional": "", "website": "", "email": "", "telefone": "", **over}
+
+
+def own_seed(*entries, lists=LISTS_SEED):  # closes the iq-lists setItem and opens one for iq-custom
+    return f"{lists}); localStorage.setItem('iq-custom', {json.dumps(json.dumps(list(entries)))}"
+
+
+OWN2 = own_seed(own("c00001", "Zeta Minha", 1),
+                own("c00002", "<img src=x onerror=alert(1)>", 2, website="javascript:alert(1)", distrito="Porto", local="Amarante"))
+ownlook = ("out.tabs = $$('#listas .tab').map(b => b.textContent); out.badge = $$('#rows .minha').length;"
+           "out.reps = $$('#c00001 .rep, #c00002 .rep').length; out.imgs = $$('#rows img').length;"
+           "out.links = $$('#rows a').filter(a => a.protocol === 'javascript:').length;")
+scenario("ownview", ownlook, seed=OWN2)
+scenario("owntab", ownlook, "minhas=1&estado=todo", seed=OWN2)
+scenario("ownfilter", ownlook, "d=Porto&c=Amarante&nome=img", seed=OWN2)
+scenario("ownbad", ownlook, seed=LISTS_SEED + "); localStorage.setItem('iq-custom', '{bad'")
+
+# The add / edit dialog, driven through its own fields.
+OWNFORM = ("const D = () => $('#propria'), F = () => $('#propria form'), set = (k, v) => { const e = F().elements[k]; e.value = v;"
+           " e.dispatchEvent(new Event('change', {bubbles: true})); }, send = () => F().requestSubmit();")
+OWNLIST = """JSON.stringify([["Favoritas", [["c00001", "nota"], ["e0002", "ligar"]]]])"""
+ONE = own("c00001", "Primeira", 1)
+scenario("ownadd", OWNFORM + """$('[data-act=add]').click(); set('nome', '  '); send(); out.open0 = D().open;
+  set('nome', 'Nova'); set('website', 'javascript:alert(1)'); send(); out.openweb = D().open; out.err = $('#propria-erro').textContent;
+  set('website', 'exemplo.pt'); set('distrito', 'Porto'); set('local', 'Amarante'); F().querySelector('[name=areas][value=clinica]').checked = true;
+  send(); out.open1 = D().open;""")
+scenario("owntabs", OWNFORM + """localStorage.setItem('iq-custom', JSON.stringify([%A%, %B%]));
+  $('[data-act=add]').click(); set('nome', 'Terceira'); send();""".replace("%A%", json.dumps(ONE)).replace("%B%", json.dumps(own("c00002", "Outra aba", 2))),
+         seed=own_seed(ONE))
+scenario("ownedit", OWNFORM + """SAVED.c00001 = {s: 'email', t: 5}; $('#c00001 [data-act=edit]').click(); out.prefill = F().elements.nome.value;
+  set('nome', 'Renomeada'); send(); out.name = $('#c00001').cells[2].textContent; out.note = $('#c00001 .nota').value; out.st = $('#c00001 select').value;""",
+         seed=own_seed(ONE, lists=OWNLIST))
+scenario("owndel", """SAVED.c00001 = {s: 'email', t: 5}; localStorage.setItem('iq-status', JSON.stringify(SAVED));
+  window.confirm = m => { out.asked = m; return true; }; $('#c00001 [data-act=delown]').click();""", "minhas=1", seed=own_seed(ONE, lists=OWNLIST))
+scenario("ownfull", OWNFORM + """Storage.prototype.setItem = () => { throw new Error('full'); };
+  $('[data-act=add]').click(); set('nome', 'Nova'); send(); out.open = D().open; out.err = $('#propria-erro').textContent;""")
+
+def own_import(file, times=1):
+    # The file's text is handed over directly: a real read takes real time and can use up the job's virtual budget
+    # (the "backup" scenarios keep covering a real read).
+    one = """delete out.alert; { const dt = new DataTransfer(), file = new File([''], 'l.json'), text = JSON.stringify(%FILE%);
+  file.text = () => Promise.resolve(text); dt.items.add(file); $('#imp-f').files = dt.files; $('#imp-f').dispatchEvent(new Event('change')); await tick(); }
+  """
+    return one.replace("%FILE%", json.dumps(file)) * times
+
+
+XLIST = [["Importada", [["c00001", "x"]]]]
+OTHER = {"listas": XLIST, "estados": {"c00001": {"s": "email", "t": 9}}, "proprias": [own("c00001", "Outra", 2)]}
+scenario("ownimport", own_import(OTHER, 2) + " out.rows = $$('#rows tr .minha').length; $('[data-act=exp]').click(); out.backup = out.blob;", seed=own_seed(own("c00001", "Local", 1)))
+scenario("ownnewer", own_import({"listas": [["Importada", [["c00007", "x"]]]], "proprias": [own("c00007", "Nova versão", 1, editado=50)]}), seed=own_seed(own("c00001", "Local", 1)))
+scenario("ownorphan", own_import({"listas": XLIST, "estados": OTHER["estados"]}), seed=own_seed(own("c00001", "Local", 1)))
+scenario("ownnotime", own_import({"listas": [], "proprias": [own("c00001", "Sem data", 0)]}), seed=own_seed(own("c00001", "Local", 0)))
+OWNLINKS = """JSON.stringify([["Favoritas", [["c00001", "nota"], ["e0002", "ligar"]]], ["So", [["c00001", ""]]]])"""
+scenario("ownlink", """SAVED.c00001 = {s: 'visto', t: 1000}; $('[data-act=link]').click(); await tick(); out.share = out.copied; out.a1 = out.alert;
+  delete out.alert; $('[data-act=lnk]').click(); await tick(); out.device = out.copied; out.a2 = out.alert;
+  delete out.alert; delete out.copied; $$('#listas .tab').find(b => b.textContent.startsWith('So')).click(); $('[data-act=link]').click(); await tick(); out.a3 = out.alert; out.only = out.copied || '';""",
+         "l=Favoritas", seed=own_seed(own("c00001", "Minha", 1), lists=OWNLINKS))
+scenario("ownlinked", "", "copia=" + quote(json.dumps({"listas": [["R", [["c00001", "n"], ["e0001", ""]]]], "estados": {"c00001": {"s": "visto", "t": 7}}, "proprias": [own("c00009", "De fora", 3)]})),
+         seed=own_seed(own("c00001", "Local", 1)))
+
+# Two tabs: the "other tab" is a direct write to localStorage, which this page hears nothing about unless the test
+# also dispatches the storage event the browser would send.
+TWO = own_seed(ONE, own("c00002", "Segunda", 2), lists=OWNLIST)
+OTHERTAB = """localStorage.setItem('iq-lists', JSON.stringify([["Favoritas", [["c00001", "nota"], ["c00002", "enviei CV"]]], ["De outro separador", []]]));
+  localStorage.setItem('iq-status', JSON.stringify({c00002: {s: 'email', t: 5}}));"""
+scenario("ownreuse", OWNFORM + """window.confirm = () => true; $('#c00001 [data-act=delown]').click(); $('[data-act=add]').click(); set('nome', 'Nova'); send();""", seed=own_seed(ONE))
+scenario("ownreimport", "window.confirm = () => true; $('#c00001 [data-act=delown]').click(); " + own_import({"listas": [], "proprias": [own("c00001", "De fora", 9)]}), seed=own_seed(ONE))
+scenario("ownstaleedit", OWNFORM + """$('#c00001 [data-act=edit]').click(); localStorage.setItem('iq-custom', '[]');
+  set('nome', 'Renomeada'); send(); out.open = D().open; out.err = $('#propria-erro').textContent;""", seed=own_seed(ONE))
+scenario("ownstaledel", "window.confirm = () => true; " + OTHERTAB + " $('#c00001 [data-act=delown]').click();", seed=TWO)
+scenario("ownstaleimport", OTHERTAB + own_import({"listas": [["Importada", []]]}), seed=TWO)
+scenario("ownstorage", OTHERTAB + """localStorage.setItem('iq-custom', JSON.stringify([%B%]));
+  dispatchEvent(new StorageEvent('storage', {key: 'iq-custom'}));
+  out.tabs = $$('#listas .tab').map(b => b.textContent); out.gone = !$('#c00001'); out.st = $('#c00002 select').value;""".replace("%B%", json.dumps(own("c00002", "Segunda", 2))), seed=TWO)
+scenario("ownlookup", "", seed=own_seed(own("c00001", "Antiga", 1, distrito="Narnia")))
 
 
 def _jobs(tmp, fixture):
@@ -1102,7 +1180,7 @@ def _part_lists_a():
         return
     dom, out = R.lists("fav")  # a list shows all its members, even ⬜ ones that Estado would hide
     assert _ids(dom) == ["e0002", "e0004", "e0005"] and _count(dom) == "3 de 3 entidades, 2 com dados"
-    assert out["tabs"] == ["Todas", "Favoritas3", "Vazia0", "+ Nova lista"] and out["notes"] == ["ligar", "", ""]
+    assert out["tabs"] == ["Todas", "Favoritas3", "Vazia0", "+ Nova lista", "+ Adicionar entidade"] and out["notes"] == ["ligar", "", ""]
     assert out["rm"] == 3 and out["mail"] == "Copiar e-mails (1)" and out["hash"] == "#l=Favoritas"
     dom, out = R.lists("vazia")
     assert _ids(dom) == [] and not re.search(r'<div id="lista-vazia"[^>]*hidden', dom) and re.search(r'<div id="vazio"[^>]*hidden', dom)
@@ -1167,7 +1245,7 @@ def _part_lists_b():
 
     dom, out = R.lists("backup")
     assert out["file2"] == "abre-portas-copia.json"
-    assert json.loads(out["backup"]) == {"listas": [FAV, ["Vazia", []]], "estados": {"e0001": {"s": "visto", "t": 1000}, "e0002": {"s": "email", "t": 5000}}}
+    assert json.loads(out["backup"]) == {"listas": [FAV, ["Vazia", []]], "estados": {"e0001": {"s": "visto", "t": 1000}, "e0002": {"s": "email", "t": 5000}}, "proprias": []}
     assert out["alert"] == "Cópia importada."
     assert stored(out) == [["Favoritas", FAV[1] + [["e0003", ""]]], ["Vazia", []], ["Importada", [["e0001", "x"]]]]
     assert json.loads(out["status"]) == {"e0001": {"s": "email", "t": 2000}, "e0002": {"s": "email", "t": 5000}}
@@ -1183,9 +1261,9 @@ def _part_lists_b():
     assert out["alert"].startswith("Ficheiro inválido") and stored(out) == [FAV, ["Vazia", []]]
 
     dom, out = R.lists("corrupt")
-    assert out["tabs"] == ["Todas", "+ Nova lista"] and _count(dom).startswith("60 de 60")
+    assert out["tabs"] == ["Todas", "+ Nova lista", "+ Adicionar entidade"] and _count(dom).startswith("60 de 60")
     dom, out = R.lists("hostile")
-    assert out["tabs"] == ["Todas", "__proto__1", "ok1", "+ Nova lista"], out["tabs"]  # hostile names are plain names; bad ids and blank names dropped
+    assert out["tabs"] == ["Todas", "__proto__1", "ok1", "+ Nova lista", "+ Adicionar entidade"], out["tabs"]  # hostile names are plain names; bad ids and blank names dropped
 
 
 def _locedge_rows():
@@ -1236,8 +1314,74 @@ def _part_locations():
     assert '"Lisboa; Porto; Coimbra; Faro; Setúbal; Braga; Aveiro; Leiria; Santarém; Viseu"' in e11 and '"213 000 001"' in e11, e11
 
 
-PAGE_PARTS = [_part_filters, _part_paging, _part_edge, _part_lists_a, _part_lists_b, _part_locations]
+def _part_own():
+    R = _results()
+    if not R:
+        return
+    dom, out = R.lists("ownview")  # default filters (Com dados + excluir) still show a name-only entry, first by Nº
+    assert _ids(dom)[:2] == ["c00001", "c00002"] and _count(dom).startswith("62 de 62"), (_ids(dom), _count(dom))
+    assert "Adicionadas por mim2" in out["tabs"] and out["badge"] == 2 and out["reps"] == 0, out
+    assert out["imgs"] == 0 and out["links"] == 0 and "alert" not in out
+    assert _pending(dom).group(1) == "60"
+    dom, out = R.lists("owntab")
+    assert _ids(dom) == ["c00001", "c00002"] and out["hash"] == "#minhas=1&estado=todo", (_ids(dom), out["hash"])
+    dom, out = R.lists("ownfilter")
+    assert _ids(dom) == ["c00002"]
+    dom, out = R.lists("ownbad")
+    assert out["bad"] == "{bad" and _count(dom).startswith("60 de 60")
 
+    dom, out = R.lists("ownadd")
+    assert out["open0"] and out["openweb"] and "Website" in out["err"] and not out["open1"], out
+    e, = json.loads(out["own"])
+    assert (e["id"], e["nome"], e["website"], e["distrito"], e["local"], e["areas"]) == ("c00001", "Nova", "https://exemplo.pt", "Porto", "Amarante", ["clinica"]), e
+    assert _ids(dom)[0] == "c00001"
+    dom, out = R.lists("owntabs")
+    assert [x["id"] for x in json.loads(out["own"])] == ["c00001", "c00002", "c00003"]
+    dom, out = R.lists("ownedit")
+    e, = json.loads(out["own"])
+    assert (e["id"], e["criado"], e["nome"]) == ("c00001", 1, "Renomeada") and e["editado"] > 1
+    assert out["prefill"] == "Primeira" and out["name"].startswith("Renomeada") and out["note"] == "nota" and out["st"] == "email", out
+    dom, out = R.lists("owndel")
+    assert "Primeira" in out["asked"] and json.loads(out["own"]) == [] and out["hash"] == "", out
+    assert "c00001" not in out["stored"] + out["status"] and "c00001" not in _ids(dom)
+    dom, out = R.lists("ownfull")
+    assert out["open"] and out["err"].startswith("Não guardado"), out
+
+    names = lambda out: [(x["id"], x["nome"]) for x in json.loads(out["own"])]
+    dom, out = R.lists("ownimport")  # same id, different creation time: a second entry, and its note and status follow it
+    assert names(out) == [("c00001", "Local"), ("c00002", "Outra")] and out["rows"] == 2 and out["alert"] == "Cópia importada.", out
+    assert ["Importada", [["c00002", "x"]]] in stored(out) and json.loads(out["status"]) == {"c00002": {"s": "email", "t": 9}}, out
+    assert [x["nome"] for x in json.loads(out["backup"])["proprias"]] == ["Local", "Outra"]
+    dom, out = R.lists("ownnewer")  # same creation time: same entry whatever its id; the newer edit wins
+    assert names(out) == [("c00001", "Nova versão")] and stored(out)[-1] == ["Importada", [["c00001", "x"]]], out
+    dom, out = R.lists("ownorphan")  # a file without the entry cannot attach a note or a status to a local one
+    assert stored(out)[-1] == ["Importada", []] and json.loads(out["status"] or "{}") == {}, out
+    dom, out = R.lists("ownnotime")  # no creation time: not enough to call two entries the same
+    assert names(out) == [("c00001", "Local"), ("c00002", "Sem data")], out
+    dom, out = R.lists("ownlink")
+    assert "c00001" not in unquote(out["share"]) + unquote(out["device"]) and "0002" in out["share"] and "#copia=" in out["device"], out
+    assert "não vão no link" in out["a1"] and "Exportar cópia" in out["a2"] and "só tem" in out["a3"] and out["only"] == "", out
+    dom, out = R.lists("ownlinked")
+    assert stored(out)[-1] == ["R", [["e0001", ""]]] and names(out) == [("c00001", "Local")] and json.loads(out["status"] or "{}") == {}, out
+
+    kept = [["c00002", "enviei CV"]]
+    dom, out = R.lists("ownreuse")  # a deleted id is never handed out again
+    assert names(out) == [("c00002", "Nova")], out
+    dom, out = R.lists("ownreimport")
+    assert names(out) == [("c00002", "De fora")], out
+    dom, out = R.lists("ownstaleedit")  # deleted in another tab: say so, write nothing
+    assert out["open"] and "apagada" in out["err"] and json.loads(out["own"]) == [], out
+    dom, out = R.lists("ownstaledel")
+    assert stored(out) == [["Favoritas", kept], ["De outro separador", []]] and json.loads(out["status"]) == {"c00002": {"s": "email", "t": 5}}, out
+    dom, out = R.lists("ownstaleimport")
+    assert ["De outro separador", []] in stored(out) and kept[0] in stored(out)[0][1] and json.loads(out["status"]) == {"c00002": {"s": "email", "t": 5}}, out
+    dom, out = R.lists("ownstorage")
+    assert "De outro separador0" in out["tabs"] and out["gone"] and out["st"] == "email", out
+    dom, out = R.lists("ownlookup")  # a value the lookup no longer knows is kept aside before a save can drop it
+    assert "Narnia" in (out["bad"] or ""), out
+
+
+PAGE_PARTS = [_part_filters, _part_paging, _part_edge, _part_lists_a, _part_lists_b, _part_locations, _part_own]
 
 def test_page():
     for part in PAGE_PARTS:

@@ -935,7 +935,12 @@ scenario("ownfull", OWNFORM + """Storage.prototype.setItem = () => { throw new E
   $('[data-act=add]').click(); set('nome', 'Nova'); send(); out.open = D().open; out.err = $('#propria-erro').textContent;""")
 
 def own_import(file, times=1):
-    return ("delete out.alert; " + IMPORT.replace("%FILE%", json.dumps(file)).replace("const dt", "{ const dt") + "\n}") * times
+    # The file's text is handed over directly: a real read takes real time and can use up the job's virtual budget
+    # (the "backup" scenarios keep covering a real read).
+    one = """delete out.alert; { const dt = new DataTransfer(), file = new File([''], 'l.json'), text = JSON.stringify(%FILE%);
+  file.text = () => Promise.resolve(text); dt.items.add(file); $('#imp-f').files = dt.files; $('#imp-f').dispatchEvent(new Event('change')); await tick(); }
+  """
+    return one.replace("%FILE%", json.dumps(file)) * times
 
 
 XLIST = [["Importada", [["c00001", "x"]]]]

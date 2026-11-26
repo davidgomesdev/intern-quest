@@ -53,7 +53,7 @@ a:hover { text-decoration-thickness: 2px; }
 #painel { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-card); }
 #painel > summary { padding: var(--s3) var(--s4); font-weight: 600; cursor: pointer; border-radius: var(--r-card); }
 #painel > summary #ativos { font-weight: 400; color: var(--muted); }
-html:not(.js) #painel, html:not(.js) .barra, html:not(.js) .pager, html:not(.js) thead { display: none; }
+html:not(.js) #painel, html:not(.js) .barra, html:not(.js) .pager, html:not(.js) #nota-priv, html:not(.js) thead { display: none; }
 #filters { padding: 0 var(--s4) var(--s4); display: grid; gap: var(--s4); }
 .campos { display: flex; flex-wrap: wrap; gap: var(--s3); align-items: end; }
 .campo { display: grid; gap: 4px; font-size: 13px; font-weight: 500; }
@@ -105,6 +105,7 @@ button:disabled { color: var(--muted); border-style: dashed; cursor: default; }
 #count { margin: 0; font-size: 15px; }
 #count strong { font: 700 20px/1 var(--round); font-variant-numeric: tabular-nums; }
 #count .pend { color: var(--muted); }
+#nota-priv { margin: 0 0 var(--s2); font-size: 13px; color: var(--muted); }
 .pp { margin-left: auto; font-size: 14px; color: var(--muted); display: inline-flex; gap: var(--s2); align-items: center; }
 .pp + .pager { margin-left: 0; }
 .pager { margin-left: auto; display: flex; gap: var(--s2); align-items: center; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -209,7 +210,7 @@ footer { padding: var(--s4) 0 var(--s6); font-size: 13px; color: var(--muted); }
 }
 
 @media print {
-  #painel, .barra, .pager-fim, thead, #listas, #lista-acoes, #backup, .lst { display: none; }
+  #painel, .barra, #nota-priv, .pager-fim, thead, #listas, #lista-acoes, #backup, .lst { display: none; }
   tbody tr { break-inside: avoid; }
 }
 

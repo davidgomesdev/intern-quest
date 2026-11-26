@@ -518,9 +518,13 @@ function render(slice) {
 }
 
 function renderCount(list, last) {
-  const total = S.l ? LST.get(S.l).size : S.minhas ? ROWS.filter(r => r.own).length : TOTAL, filled = list.filter(r => r.ok).length;
-  $('#count').replaceChildren(el('strong', '', list.length), ` de ${total} entidades, ${filled} com dados`);
-  const todo = S.l || S.minhas || S.estado !== 'ok' ? 0 : ROWS.filter(r => !r.own && matches(r, { nome: norm(S.nome), estado: 'todo' })).length; // the default filter hides ⬜ rows: say how many
+  const ok = !S.l && !S.minhas && S.estado === 'ok'; // under "Com dados" the total is that population, not every row
+  const total = S.l ? LST.get(S.l).size : S.minhas ? ROWS.filter(r => r.own).length
+    : ok ? ROWS.filter(r => !r.removed && r.ok && (r.own || !(S.excluir && r.empty))).length : TOTAL, filled = list.filter(r => r.ok).length;
+  const star = !S.l && !S.minhas && S.estado === 'todos'; // '*' points at the #nota-priv line
+  $('#count').replaceChildren(el('strong', '', list.length), ` de ${total} entidades${star ? '*' : ''}, ${filled} com dados`);
+  $('#nota-priv').hidden = !star;
+  const todo = !ok ? 0 : ROWS.filter(r => !r.own && matches(r, { nome: norm(S.nome), estado: 'todo' })).length; // the default filter hides ⬜ rows: say how many
   if (todo) $('#count').append(el('span', 'pend', ` (${todo} ainda por preencher)`));
   document.querySelectorAll('.pager').forEach(p => {
     p.querySelector('span').textContent = `Página ${S.p} de ${last}`;

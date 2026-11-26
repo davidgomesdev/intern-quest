@@ -758,31 +758,31 @@ def _need_chrome():
 
 
 ALL = "estado=todos&excluir=0&"
-D3 = "3 de 5 entidades, 3 com dados"
+D3 = "3 de 3 entidades, 3 com dados"
 # (hash, count, Filtros ativos) on the 5-row fixture
 CASES = [
-    ("", D3, ""), ("a=clinica", "2 de 5 entidades, 2 com dados", "(1 ativo)"),
+    ("", D3, ""), ("a=clinica", "2 de 3 entidades, 2 com dados", "(1 ativo)"),
     ("a=clinica,neuropsicologia", D3, "(2 ativos)"),
     ("a=", D3, ""),
-    ("c=Lisboa", "1 de 5 entidades, 1 com dados", "(1 ativo)"),
-    ("nome=agata", "1 de 5 entidades, 1 com dados", "(1 ativo)"),
-    ("nome=%C3%81GATA", "1 de 5 entidades, 1 com dados", "(1 ativo)"),
-    ("nome=epsilon", "0 de 5 entidades, 0 com dados", "(1 ativo)"),
-    ("nome=epsilon&excluir=0", "1 de 5 entidades, 1 com dados", "(2 ativos)"),
-    ("c=Porto", "1 de 5 entidades, 1 com dados", "(1 ativo)"),
+    ("c=Lisboa", "1 de 3 entidades, 1 com dados", "(1 ativo)"),
+    ("nome=agata", "1 de 3 entidades, 1 com dados", "(1 ativo)"),
+    ("nome=%C3%81GATA", "1 de 3 entidades, 1 com dados", "(1 ativo)"),
+    ("nome=epsilon", "0 de 3 entidades, 0 com dados", "(1 ativo)"),
+    ("nome=epsilon&excluir=0", "1 de 4 entidades, 1 com dados", "(2 ativos)"),
+    ("c=Porto", "1 de 3 entidades, 1 com dados", "(1 ativo)"),
     ("c=porto", D3, ""),
-    ("d=Lisboa", "2 de 5 entidades, 2 com dados", "(1 ativo)"),
-    ("d=desconhecido", "0 de 5 entidades, 0 com dados", "(1 ativo)"),
-    ("d=desconhecido&excluir=0", "1 de 5 entidades, 1 com dados", "(2 ativos)"),
+    ("d=Lisboa", "2 de 3 entidades, 2 com dados", "(1 ativo)"),
+    ("d=desconhecido", "0 de 3 entidades, 0 com dados", "(1 ativo)"),
+    ("d=desconhecido&excluir=0", "1 de 4 entidades, 1 com dados", "(2 ativos)"),
     ("contacto=1", D3, "(1 ativo)"),
-    ("contacto=1&estado=todos", D3, "(2 ativos)"),
+    ("contacto=1&estado=todos", "3 de 5 entidades, 3 com dados", "(2 ativos)"),
     ("estado=todo", "1 de 5 entidades, 0 com dados", "(1 ativo)"),
     ("estado=ok", D3, ""),
     ("estado=todos", "4 de 5 entidades, 3 com dados", "(1 ativo)"),
-    ("vazias=1", "4 de 5 entidades, 4 com dados", "(1 ativo)"),  # legacy link: same as excluir=0
+    ("vazias=1", "4 de 4 entidades, 4 com dados", "(1 ativo)"),  # legacy link: same as excluir=0
     ("excluir=1", D3, ""),
     ("estado=todos&excluir=0", "5 de 5 entidades, 4 com dados", "(2 ativos)"),
-    ("nome=zzz", "0 de 5 entidades, 0 com dados", "(1 ativo)"),
+    ("nome=zzz", "0 de 3 entidades, 0 com dados", "(1 ativo)"),
     ("p=999&a=bogus&ord=zzz", D3, ""),
     ("ord=morada", D3, ""),
     ("ord=__proto__", D3, ""),
@@ -1084,7 +1084,9 @@ def _part_filters():
     small = R.sweep("small", SMALL)
     for h, want, act in CASES:
         dom = small(h)
+        if "estado=todos" in h: want = want.replace(" entidades", " entidades*")
         assert _count(dom) == want, (h, _count(dom), want)
+        assert ("hidden" not in re.search(r'<p id="nota-priv"[^>]*>', dom)[0]) == ("estado=todos" in h), h
         assert _ativos(dom) == act, (h, _ativos(dom))
     assert _pending(small("")).group(1) == "1" and not _pending(small("estado=todos"))  # default hides 1 ⬜ row; asking for all drops the hint
     for h in ["ord=__proto__", "ord=constructor", "a=constructor"]:
@@ -1128,7 +1130,7 @@ def _part_paging():
     _big = R.sweep("big", BIG)
     big = lambda h="": _big(ALL + h)
     dom = big()
-    assert _count(dom) == "120 de 120 entidades, 60 com dados" and _pager(dom) == "Página 1 de 12"  # default 10 per page
+    assert _count(dom) == "120 de 120 entidades*, 60 com dados" and _pager(dom) == "Página 1 de 12"  # default 10 per page
     assert len(_ids(dom)) == 10 and _ids(dom)[0] == "e0001" and _disabled(dom) == 2
     assert 'data-p="prev"' in dom and re.findall(r'data-p="prev"[^>]*disabled', dom)
     assert not re.findall(r'data-p="next"[^>]*disabled', dom)
@@ -1183,7 +1185,7 @@ def _part_lists_a():
     dom, out = R.lists("vazia")
     assert _ids(dom) == [] and not re.search(r'<div id="lista-vazia"[^>]*hidden', dom) and re.search(r'<div id="vazio"[^>]*hidden', dom)
     dom, out = R.lists("nope")  # unknown list: back to Todas
-    assert _count(dom).startswith("60 de 120") and out["rm"] == 0 and out["hash"] == ""
+    assert _count(dom).startswith("60 de 60") and out["rm"] == 0 and out["hash"] == ""
 
     dom, out = R.lists("menu")
     assert out["menus"] == 1 and out["under"] == "e0002" and out["label"] == "Listas de Entidade 002" and out["expanded"] == "true"
@@ -1259,7 +1261,7 @@ def _part_lists_b():
     assert out["alert"].startswith("Ficheiro inválido") and stored(out) == [FAV, ["Vazia", []]]
 
     dom, out = R.lists("corrupt")
-    assert out["tabs"] == ["Todas", "+ Nova lista", "+ Adicionar entidade"] and _count(dom).startswith("60 de 120")
+    assert out["tabs"] == ["Todas", "+ Nova lista", "+ Adicionar entidade"] and _count(dom).startswith("60 de 60")
     dom, out = R.lists("hostile")
     assert out["tabs"] == ["Todas", "__proto__1", "ok1", "+ Nova lista", "+ Adicionar entidade"], out["tabs"]  # hostile names are plain names; bad ids and blank names dropped
 
@@ -1280,7 +1282,7 @@ def _part_locations():
         return
     loc = R.sweep("loc", LOCH)
     a, p, c, f, u = (loc(h) for h in LOCH)
-    assert _count(a) == "5 de 5 entidades, 5 com dados" and 'aria-label="A rever localizações"' in a  # 🔄 counts as filled
+    assert _count(a) == "5 de 5 entidades*, 5 com dados" and 'aria-label="A rever localizações"' in a  # 🔄 counts as filled
     assert _cell(a, "e0011", 4).startswith("Por todo o país (10 distritos)") and "Todas as localizações" in a
     assert _cell(a, "e0012", 4).startswith("Porto, Coimbra, Faro")  # rank order, 3 districts, no +N
     assert _cell(a, "e0013", 4).startswith("Lisboa, Porto")  # two Lisboa sites count once
@@ -1317,7 +1319,7 @@ def _part_own():
     if not R:
         return
     dom, out = R.lists("ownview")  # default filters (Com dados + excluir) still show a name-only entry, first by Nº
-    assert _ids(dom)[:2] == ["c00001", "c00002"] and _count(dom).startswith("62 de 122"), (_ids(dom), _count(dom))
+    assert _ids(dom)[:2] == ["c00001", "c00002"] and _count(dom).startswith("62 de 62"), (_ids(dom), _count(dom))
     assert "Adicionadas por mim2" in out["tabs"] and out["badge"] == 2 and out["reps"] == 0, out
     assert out["imgs"] == 0 and out["links"] == 0 and "alert" not in out
     assert _pending(dom).group(1) == "60"
@@ -1326,7 +1328,7 @@ def _part_own():
     dom, out = R.lists("ownfilter")
     assert _ids(dom) == ["c00002"]
     dom, out = R.lists("ownbad")
-    assert out["bad"] == "{bad" and _count(dom).startswith("60 de 120")
+    assert out["bad"] == "{bad" and _count(dom).startswith("60 de 60")
 
     dom, out = R.lists("ownadd")
     assert out["open0"] and out["openweb"] and "Website" in out["err"] and not out["open1"], out

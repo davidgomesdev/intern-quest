@@ -6484,6 +6484,27 @@
   <button type="button" data-act="lnk">Copiar link para outro dispositivo</button>
   <input type="file" id="imp-f" accept=".json,application/json" hidden>
 </details>
+
+<dialog id="propria" aria-labelledby="propria-t">
+<form novalidate>
+  <h2 id="propria-t">Adicionar entidade</h2>
+  <p class="dica">Fica guardada só neste navegador. Só o nome é obrigatório.</p>
+  <label class="campo">Nome <input name="nome" required maxlength="200" autocomplete="off"></label>
+  <label class="campo">Distrito <select name="distrito"><option value="">—</option></select></label>
+  <label class="campo">Local <select name="local" disabled><option value="">—</option></select></label>
+  <label class="campo">Morada <input name="morada" maxlength="200" autocomplete="off"></label>
+  <fieldset>
+    <legend>Áreas de atuação</legend>
+    <div class="opcoes"></div>
+  </fieldset>
+  <label class="campo">Adicional <textarea name="adicional" maxlength="500" rows="2"></textarea></label>
+  <label class="campo">Website <input name="website" inputmode="url" maxlength="200" autocomplete="off"></label>
+  <label class="campo">E-mail <input type="email" name="email" maxlength="200" autocomplete="off"></label>
+  <label class="campo">Telefone <input type="tel" name="telefone" maxlength="40" autocomplete="off"></label>
+  <p id="propria-erro" role="alert"></p>
+  <div class="botoes"><button type="submit">Guardar</button> <button type="button" data-act="cancel">Cancelar</button></div>
+</form>
+</dialog>
 </main>
 
 <footer>

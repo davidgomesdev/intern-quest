@@ -914,6 +914,26 @@ scenario("owntab", ownlook, "minhas=1&estado=todo", seed=OWN2)
 scenario("ownfilter", ownlook, "d=Porto&c=Amarante&nome=img", seed=OWN2)
 scenario("ownbad", ownlook, seed=LISTS_SEED + "); localStorage.setItem('iq-custom', '{bad'")
 
+# The add / edit dialog, driven through its own fields.
+OWNFORM = ("const D = () => $('#propria'), F = () => $('#propria form'), set = (k, v) => { const e = F().elements[k]; e.value = v;"
+           " e.dispatchEvent(new Event('change', {bubbles: true})); }, send = () => F().requestSubmit();")
+OWNLIST = """JSON.stringify([["Favoritas", [["c00001", "nota"], ["e0002", "ligar"]]]])"""
+ONE = own("c00001", "Primeira", 1)
+scenario("ownadd", OWNFORM + """$('[data-act=add]').click(); set('nome', '  '); send(); out.open0 = D().open;
+  set('nome', 'Nova'); set('website', 'javascript:alert(1)'); send(); out.openweb = D().open; out.err = $('#propria-erro').textContent;
+  set('website', 'exemplo.pt'); set('distrito', 'Porto'); set('local', 'Amarante'); F().querySelector('[name=areas][value=clinica]').checked = true;
+  send(); out.open1 = D().open;""")
+scenario("owntabs", OWNFORM + """localStorage.setItem('iq-custom', JSON.stringify([%A%, %B%]));
+  $('[data-act=add]').click(); set('nome', 'Terceira'); send();""".replace("%A%", json.dumps(ONE)).replace("%B%", json.dumps(own("c00002", "Outra aba", 2))),
+         seed=own_seed(ONE))
+scenario("ownedit", OWNFORM + """SAVED.c00001 = {s: 'email', t: 5}; $('#c00001 [data-act=edit]').click(); out.prefill = F().elements.nome.value;
+  set('nome', 'Renomeada'); send(); out.name = $('#c00001').cells[2].textContent; out.note = $('#c00001 .nota').value; out.st = $('#c00001 select').value;""",
+         seed=own_seed(ONE, lists=OWNLIST))
+scenario("owndel", """SAVED.c00001 = {s: 'email', t: 5}; localStorage.setItem('iq-status', JSON.stringify(SAVED));
+  window.confirm = m => { out.asked = m; return true; }; $('#c00001 [data-act=delown]').click();""", "minhas=1", seed=own_seed(ONE, lists=OWNLIST))
+scenario("ownfull", OWNFORM + """Storage.prototype.setItem = () => { throw new Error('full'); };
+  $('[data-act=add]').click(); set('nome', 'Nova'); send(); out.open = D().open; out.err = $('#propria-erro').textContent;""")
+
 
 def _jobs(tmp, fixture):
     """Every page job: [(id, page path, hash, virtual ms it may take)]; sweeps carry their hashes in the page."""
@@ -1119,7 +1139,7 @@ def _part_lists_a():
         return
     dom, out = R.lists("fav")  # a list shows all its members, even ⬜ ones that Estado would hide
     assert _ids(dom) == ["e0002", "e0004", "e0005"] and _count(dom) == "3 de 3 entidades, 2 com dados"
-    assert out["tabs"] == ["Todas", "Favoritas3", "Vazia0", "+ Nova lista"] and out["notes"] == ["ligar", "", ""]
+    assert out["tabs"] == ["Todas", "Favoritas3", "Vazia0", "+ Nova lista", "+ Adicionar entidade"] and out["notes"] == ["ligar", "", ""]
     assert out["rm"] == 3 and out["mail"] == "Copiar e-mails (1)" and out["hash"] == "#l=Favoritas"
     dom, out = R.lists("vazia")
     assert _ids(dom) == [] and not re.search(r'<div id="lista-vazia"[^>]*hidden', dom) and re.search(r'<div id="vazio"[^>]*hidden', dom)
@@ -1200,9 +1220,9 @@ def _part_lists_b():
     assert out["alert"].startswith("Ficheiro inválido") and stored(out) == [FAV, ["Vazia", []]]
 
     dom, out = R.lists("corrupt")
-    assert out["tabs"] == ["Todas", "+ Nova lista"] and _count(dom).startswith("60 de 120")
+    assert out["tabs"] == ["Todas", "+ Nova lista", "+ Adicionar entidade"] and _count(dom).startswith("60 de 120")
     dom, out = R.lists("hostile")
-    assert out["tabs"] == ["Todas", "__proto__1", "ok1", "+ Nova lista"], out["tabs"]  # hostile names are plain names; bad ids and blank names dropped
+    assert out["tabs"] == ["Todas", "__proto__1", "ok1", "+ Nova lista", "+ Adicionar entidade"], out["tabs"]  # hostile names are plain names; bad ids and blank names dropped
 
 
 def _locedge_rows():
@@ -1268,6 +1288,23 @@ def _part_own():
     assert _ids(dom) == ["c00002"]
     dom, out = R.lists("ownbad")
     assert out["bad"] == "{bad" and _count(dom).startswith("60 de 120")
+
+    dom, out = R.lists("ownadd")
+    assert out["open0"] and out["openweb"] and "Website" in out["err"] and not out["open1"], out
+    e, = json.loads(out["own"])
+    assert (e["id"], e["nome"], e["website"], e["distrito"], e["local"], e["areas"]) == ("c00001", "Nova", "https://exemplo.pt", "Porto", "Amarante", ["clinica"]), e
+    assert _ids(dom)[0] == "c00001"
+    dom, out = R.lists("owntabs")
+    assert [x["id"] for x in json.loads(out["own"])] == ["c00001", "c00002", "c00003"]
+    dom, out = R.lists("ownedit")
+    e, = json.loads(out["own"])
+    assert (e["id"], e["criado"], e["nome"]) == ("c00001", 1, "Renomeada") and e["editado"] > 1
+    assert out["prefill"] == "Primeira" and out["name"].startswith("Renomeada") and out["note"] == "nota" and out["st"] == "email", out
+    dom, out = R.lists("owndel")
+    assert "Primeira" in out["asked"] and json.loads(out["own"]) == [] and out["hash"] == "", out
+    assert "c00001" not in out["stored"] + out["status"] and "c00001" not in _ids(dom)
+    dom, out = R.lists("ownfull")
+    assert out["open"] and out["err"].startswith("Não guardado"), out
 
 
 PAGE_PARTS = [_part_filters, _part_paging, _part_edge, _part_lists_a, _part_lists_b, _part_locations, _part_own]

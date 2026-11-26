@@ -96,6 +96,87 @@ function loadOwn() { // what cannot be read is copied aside first, so the next s
   return list.filter(Boolean);
 }
 
+function writeOwn(change) { // re-reads first, so entries added in another tab survive; false if the browser refused
+  try { localStorage.setItem(OWN_KEY, JSON.stringify(change(loadOwn()))); return true; } catch { return false; }
+}
+const nextOwnId = list => 'c' + String(1 + Math.max(0, ...list.map(e => +e.id.slice(1)))).padStart(5, '0');
+const byId = (a, b) => a.id.localeCompare(b.id);
+
+function reloadOwn() { // rebuild the custom rows from storage
+  ROWS = [...ROWS.filter(r => !r.own), ...loadOwn().map(e => parseRow(ownRow(e)))];
+  index();
+  const c = form.elements.c.value;
+  distOptions(); fillLocais(form.elements.d.value);
+  form.elements.c.value = c;
+  S.d = form.elements.d.value; S.c = form.elements.c.value;
+  if (!ROWS.some(r => r.own)) S.minhas = false;
+}
+
+function ownLocais(d) { // the dialog's Local list depends on its Distrito
+  const c = $('#propria form').elements.local;
+  c.length = 1; c.disabled = !d;
+  c.append(...[...(LOC[d] || [])].sort(COLL.compare).map(v => new Option(v)));
+}
+
+let EDIT = ''; // id being edited; '' while adding
+
+function openOwn(id) {
+  const f = $('#propria form'), e = loadOwn().find(x => x.id === id);
+  EDIT = e ? id : '';
+  f.reset();
+  for (const k of Object.keys(OWN_CAPS)) f.elements[k].value = e?.[k] ?? '';
+  f.elements.distrito.value = e?.distrito ?? ''; ownLocais(e?.distrito); f.elements.local.value = e?.local ?? '';
+  f.querySelectorAll('[name=areas]').forEach(i => { i.checked = !!e?.areas.includes(i.value); });
+  $('#propria-t').textContent = e ? 'Editar entidade' : 'Adicionar entidade';
+  $('#propria-erro').textContent = '';
+  $('#propria').showModal();
+}
+
+function saveOwnForm(ev) {
+  ev.preventDefault();
+  const f = ev.target, err = t => { $('#propria-erro').textContent = t; };
+  const typed = Object.fromEntries([...Object.keys(OWN_CAPS), 'distrito', 'local'].map(k => [k, f.elements[k].value]));
+  typed.areas = Array.from(f.querySelectorAll('[name=areas]:checked'), i => i.value);
+  const check = cleanEntry({ ...typed, id: 'c00000' });
+  if (!check) return err('Escreve o nome da entidade.');
+  if (typed.website.trim() && !check.website) return err('Website inválido. Usa um endereço como exemplo.pt.');
+  if (typed.email.trim() && (!check.email || !f.elements.email.checkValidity())) return err('E-mail inválido.');
+  const ok = writeOwn(list => {
+    const old = list.find(x => x.id === EDIT), now = Date.now();
+    const id = EDIT || nextOwnId(list);
+    return [...list.filter(x => x.id !== id), { ...check, id, criado: old?.criado ?? now, editado: now }].sort(byId);
+  });
+  if (!ok) return err('Não guardado: o navegador bloqueou o armazenamento.');
+  $('#propria').close();
+  reloadOwn(); update();
+}
+
+function deleteOwn(id) {
+  const r = BYID.get(id);
+  if (!confirm(`Apagar «${r.nome}»? O estado e as notas desta entidade também são apagados.`)) return;
+  if (!writeOwn(list => list.filter(x => x.id !== id))) return alert('Não apagada: o navegador bloqueou o armazenamento.');
+  delete SAVED[id];
+  try { localStorage.setItem('iq-status', JSON.stringify(SAVED)); } catch { /* storage full or blocked */ }
+  for (const m of LST.values()) m.delete(id);
+  saveLists();
+  PICK = '';
+  reloadOwn(); update();
+}
+
+function ownDialog() { // fill the dialog's options and wire it, once
+  const f = $('#propria form');
+  f.elements.distrito.append(...Object.keys(LOC).sort(COLL.compare).map(v => new Option(v)));
+  for (const [k, [icon, label]] of Object.entries(AREAS)) {
+    if (k === 'desconhecido') continue;
+    const l = el('label', 'toggle'), i = el('input');
+    i.type = 'checkbox'; i.name = 'areas'; i.value = k;
+    l.append(i, el('span', '', `${icon} ${label}`));
+    f.querySelector('.opcoes').append(l);
+  }
+  f.elements.distrito.addEventListener('change', e => ownLocais(e.target.value));
+  f.addEventListener('submit', saveOwnForm);
+}
+
 function ownRow(e) { // the same 11 cells as an OPP row, so parseRow and everything after it treat both alike
   const tr = el('tr'); tr.id = e.id;
   const cells = ['✏️', e.id, e.nome, e.local, e.distrito, e.morada, e.areas.join(' '), e.adicional, e.website, e.email, e.telefone];
@@ -306,7 +387,11 @@ function enhance(r) {
   const rep = el('button', 'rep', '🚩'); rep.type = 'button'; rep.title = rep.ariaLabel = 'Reportar erro nesta entidade';
   const mail = 'mailto:opp-estagios@davidgomes.blog?subject=' + encodeURIComponent(`${r.el.id} – ${c[2].textContent.replace(/\s+/g, ' ').trim()}`) + '&body=' + encodeURIComponent('Descreve o erro nesta entidade:\n');
   rep.onclick = () => { location.href = mail; };
-  if (!r.own) c[1].append(' ', rep); // nothing to report about your own entry
+  if (!r.own) c[1].append(' ', rep); // nothing to report about your own entry: edit and delete take its place
+  else for (const [text, act, title] of [['✏️', 'edit', 'Editar'], ['🗑', 'delown', 'Apagar']]) {
+    const b = el('button', 'own-btn', text); b.type = 'button'; b.dataset.act = act; b.dataset.r = r.id; b.title = title; b.setAttribute('aria-label', `${title} ${r.nome}`);
+    c[1].append(' ', b);
+  }
   td.setAttribute('role', 'cell'); td.append(sel); r.el.append(td);
   r.tl = el('span', 'lst'); c[1].append(' ', r.tl); // lists: ★ (+ ✕ inside a list) right after the 🚩, same flat style. Filled by listCell()
   r.tn = el('td'); r.tn.setAttribute('role', 'cell'); r.el.append(r.tn); // the note, inside a list
@@ -506,7 +591,9 @@ function renderTabs() {
   add.type = 'button'; add.dataset.act = 'new';
   const mine = ROWS.filter(r => r.own).length, own = mine ? tab('Adicionadas por mim', '', mine) : null;
   if (own) { own.dataset.act = 'owntab'; own.setAttribute('aria-pressed', S.minhas); }
-  $('#listas').replaceChildren(tab('Todas', ''), ...(own ? [own] : []), ...[...LST].map(([n, m]) => tab(n, n, m.size)), add);
+  const novaE = el('button', 'tab nova', '+ Adicionar entidade');
+  novaE.type = 'button'; novaE.dataset.act = 'add';
+  $('#listas').replaceChildren(tab('Todas', ''), ...(own ? [own] : []), ...[...LST].map(([n, m]) => tab(n, n, m.size)), add, novaE);
   $('#listas').hidden = $('#backup').hidden = false;
   $('#lista-acoes').hidden = !S.l;
   if (S.l) {
@@ -573,6 +660,10 @@ function download(name, text, type) {
 }
 
 const ACT = { // every [data-act] button
+  add: () => openOwn(''),
+  edit: b => openOwn(b.dataset.r),
+  delown: b => deleteOwn(b.dataset.r),
+  cancel: () => $('#propria').close(),
   ajuda: b => { const h = $('#ajuda'); h.hidden = !h.hidden; b.setAttribute('aria-expanded', !h.hidden); if (!h.hidden) b.closest('details').open = true; }, // the ? next to the backup title
   tab: b => { S.l = b.dataset.l; S.minhas = false; S.p = 1; update(); },
   owntab: () => { S.l = ''; S.minhas = true; S.p = 1; update(); },
@@ -669,6 +760,7 @@ window.addEventListener('hashchange', () => { readState(); update(); });
 try {
   loadLookup();
   parse();
+  ownDialog();
   buildOptions();
   if (matchMedia('(max-width: 719px)').matches) $('#painel').open = false;
   readState();
